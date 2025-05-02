@@ -1,0 +1,39 @@
+# Python virtual environments
+.venv/
+venv/
+
+# Caches and compiled files
+__pycache__/
+*.py[cod]
+.cache/
+*.log
+
+# Project-specific directories (adjust as needed)
+demo/
+samples/
+data/
+
+# Notebook and data files
+*.ipynb
+*.feather
+*.csv
+*.tsv
+*.xlsx
+
+# Image files
+cover_demo.jpg
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# VS Code and other editor settings
+.vscode/
+.idea/
+
+# Environment and config files
+.env
+*.env
+*.ini
+*.cfg
+*.toml
