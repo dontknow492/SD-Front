@@ -3,7 +3,7 @@ from PySide6.QtCore import Qt
 from gui.common import GridFrame
 from gui.common.card import FlowTitleCard
 from gui.components import ComboBoxCard, SliderCard, CheckBoxCard, DoubleSliderCard
-from api import api_manager
+from api import sd_api_manager
 
 
 class SamplerBox(GridFrame):
@@ -174,7 +174,7 @@ class SamplerBox(GridFrame):
 
         self.addFullWidthWidget(container)
 
-        api_manager.sampler_fetched.connect(self.set_samplers)
+        sd_api_manager.sampler_fetched.connect(self.set_samplers)
 
     def get_payload(self) -> dict:
         return {
@@ -247,6 +247,6 @@ if __name__ == "__main__":
     #     "flow_shift": 0.3
     # })
     print(window.get_payload())
-    api_manager.fetch_sampler()
+    sd_api_manager.fetch_sampler()
     app.exec()
 

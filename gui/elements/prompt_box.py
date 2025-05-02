@@ -9,7 +9,7 @@ from gui.common import VerticalScrollWidget
 from gui.common.button import ThemedToolButton
 from gui.components import TextEditCard
 
-from api import api_manager
+from api import sd_api_manager
 from PySide6.QtWidgets import QHBoxLayout, QCompleter
 
 
@@ -33,7 +33,7 @@ class PromptBox(VerticalFrame):
         self.negative_prompt.set_hover_effect_enabled(False)
         self.negative_prompt.set_focus_style_enabled(False)
         # self.negative_prompt.setPlaceholderText('Negative Prompt')
-        api_manager.style_fetched.connect(self.set_styles)
+        sd_api_manager.style_fetched.connect(self.set_styles)
 
         self._setup_ui()
 
@@ -105,7 +105,7 @@ if __name__ == "__main__":
     from PySide6.QtWidgets import QApplication, QWidget
     app = QApplication([])
     window = PromptBox()
-    # api_manager.fetch_style()
+    # sd_api_manager.fetch_style()
     print(window.get_payload())
     window.show()
     app.exec()

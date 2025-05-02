@@ -1,6 +1,6 @@
 from gui.common import GridFrame, ThemedToolButton
 from gui.components import CheckBoxCard, ComboBoxCard, SliderCard, TextEditCard, DoubleSliderCard
-from api import api_manager
+from api import sd_api_manager
 from qfluentwidgets import TogglePushButton
 
 class RefineBox(GridFrame):
@@ -196,7 +196,7 @@ class RefineBox(GridFrame):
         self.addFullWidthWidget(self.refine_prompt)
         self.addFullWidthWidget(self.refine_negative_prompt)
 
-        api_manager.sampler_fetched.connect(self.set_samplers)
+        sd_api_manager.sampler_fetched.connect(self.set_samplers)
 
     def get_payload(self) -> dict:
         """Returns the current payload of the refine box."""

@@ -1,1 +1,1 @@
-from .sd_api import api_manager
+from .sd_api import sd_api_manager

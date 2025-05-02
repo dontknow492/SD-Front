@@ -1,42 +1,28 @@
-import json
-
-from PySide6.QtCore import Signal, QObject, QEventLoop, Slot, QByteArray, QUrl, QTimer
-from PySide6.QtNetwork import QNetworkReply, QNetworkRequest, QNetworkAccessManager
-
-from api.fetcher import *
+from typing import Dict, Any
+from PySide6.QtCore import Signal, QObject, Slot, Qt
+from api.generator import ImageGenerator
+from api.fetcher import ProgressTracker, BaseFetcher
 
 
 class StableDiffusionAPI(QObject):
-    # Samplers
+    # Success signals
     sampler_fetched = Signal(list)
-    sampler_fetch_error = Signal(str, int)
-
-    # Checkpoints
     checkpoint_fetched = Signal(list)
-    checkpoint_fetch_error = Signal(str, int)
-
-    # Embeddings
     embedding_fetched = Signal(list)
-    embedding_fetch_error = Signal(str, int)
-
-    # Hypernetworks
     hypernetwork_fetched = Signal(list)
-    hypernetwork_fetch_error = Signal(str, int)
-
-    # LoRA
     lora_fetched = Signal(list)
-    lora_fetch_error = Signal(str, int)
-
-    # Styles
     style_fetched = Signal(list)
-    style_fetch_error = Signal(str, int)
-
-    # Upscalers
     upscaler_fetched = Signal(list)
-    upscaler_fetch_error = Signal(str, int)
-
-    # VAE
     vae_fetched = Signal(list)
+
+    # Error signals
+    sampler_fetch_error = Signal(str, int)
+    checkpoint_fetch_error = Signal(str, int)
+    embedding_fetch_error = Signal(str, int)
+    hypernetwork_fetch_error = Signal(str, int)
+    lora_fetch_error = Signal(str, int)
+    style_fetch_error = Signal(str, int)
+    upscaler_fetch_error = Signal(str, int)
     vae_fetch_error = Signal(str, int)
 
     #img
@@ -44,183 +30,199 @@ class StableDiffusionAPI(QObject):
     image_generated = Signal(dict)
     image_generation_error = Signal(str)
 
+    #message
+    messageSignal = Signal(str, str) #lvl, msg
+
+    # Operation signals
+    models_refreshed = Signal()
+    loras_refreshed = Signal()
+    server_status_changed = Signal(bool)  # True when available
+
     def __init__(self, base_url="http://127.0.0.1:7860", parent=None):
         super().__init__(parent)
 
         self.base_url = base_url
-        self.network_manager = QNetworkAccessManager(self)
-        self.network_manager.finished.connect(self._on_request_finished)
-        self.progress_timer = QTimer(self)
-        self.progress_timer.timeout.connect(self._check_progress)
-        self.active_generation = False
-
         self.cache_limit = 100 * 1024 * 1024
         self.auth_token = None
+        self.image_generator = ImageGenerator(base_url, self)
+        self.info_fetcher = BaseFetcher(base_url, self.auth_token, self.cache_limit, self)
+        self.progress_tracker = ProgressTracker(self.info_fetcher)
+        self.active_generation = False
 
-        self.progress_fetcher = ProgressFetcher(base_url)
-        self.progress_fetcher.dataFetched.connect(self.on_progress_updated)
-        self.progress_update_time = 500
-        self.sampler_fetcher = SamplerFetcher(base_url, self.auth_token, self.cache_limit, self)
-        self.checkpoint_fetcher = ModelFetcher(base_url, self.auth_token, self.cache_limit, self)
-        self.embedding_fetcher = EmbeddingFetcher(base_url, self.auth_token, self.cache_limit, self)
-        self.hypernetwork_fetcher = HypernetworkFetcher(base_url, self.auth_token, self.cache_limit, self)
-        self.lora_fetcher = LoraFetcher(base_url, self.auth_token, self.cache_limit, self)
-        self.style_fetcher = StyleFetcher(base_url, self.auth_token, self.cache_limit, self)
-        self.upscaler_fetcher = UpscalerFetcher(base_url, self.auth_token, self.cache_limit, self)
-        self.vae_fetcher = VaeFetcher(base_url, self.auth_token, self.cache_limit, self)
+        self._signal_mapping()
 
-        #generator
-        self._fetcher_signal_listener()
+    def _signal_mapping(self):
+        #image
+        self.image_generator.generation_failed.connect(self.image_generation_error.emit)
+        self.image_generator.generation_failed.connect(self.progress_tracker.stop_monitoring)
+        self.image_generator.generation_completed.connect(self.image_generated.emit)
+        self.image_generator.generation_completed.connect(self.progress_tracker.stop_monitoring)
+        self.image_generator.generation_started.connect(self.gen_started)
+        #progress
+        self.progress_tracker.progressData.connect(self.image_progress_updated.emit)
+        #fetcher
+        self.info_fetcher.dataFetched.connect(self._handle_response)
+        self.info_fetcher.fetchFailed.connect(self._handle_error)
+        self.info_fetcher.serverAvailable.connect(self.server_status_changed)
 
 
-    def _fetcher_signal_listener(self):
-        # Sampler
-        self.sampler_fetcher.dataFetched.connect(self.sampler_fetched)
-        self.sampler_fetcher.fetchFailed.connect(self.sampler_fetch_error)
+        # === Public API Methods ===
 
-        # Checkpoint
-        self.checkpoint_fetcher.dataFetched.connect(self.checkpoint_fetched)
-        self.checkpoint_fetcher.fetchFailed.connect(self.checkpoint_fetch_error)
+    @Slot()
+    def refresh_models(self):
+        """Force refresh of model list"""
+        self.info_fetcher.refresh_models()
+        self.info_fetcher.dataFetched.connect(
+            lambda _, uuid: self.models_refreshed.emit(),
+            Qt.ConnectionType.SingleShotConnection)
 
-        # Embedding
-        self.embedding_fetcher.dataFetched.connect(self.embedding_fetched)
-        self.embedding_fetcher.fetchFailed.connect(self.embedding_fetch_error)
+    @Slot()
+    def refresh_loras(self):
+        """Force refresh of LoRA list"""
+        self.info_fetcher.refresh_loras()
+        self.info_fetcher.dataFetched.connect(
+            lambda _, uuid: self.loras_refreshed.emit(),
+            Qt.ConnectionType.SingleShotConnection)
 
-        # Hypernetwork
-        self.hypernetwork_fetcher.dataFetched.connect(self.hypernetwork_fetched)
-        self.hypernetwork_fetcher.fetchFailed.connect(self.hypernetwork_fetch_error)
+    @Slot()
+    def fetch_all_resources(self):
+        """Pre-fetch all common resources"""
+        self.get_models()
+        self.get_vaes()
+        self.get_embeddings()
+        self.get_loras()
+        self.get_styles()
 
-        # LoRA
-        self.lora_fetcher.dataFetched.connect(self.lora_fetched)
-        self.lora_fetcher.fetchFailed.connect(self.lora_fetch_error)
+    @Slot()
+    def get_models(self):
+        """Fetch available models"""
+        uuid = self.info_fetcher.fetch_models()
+        self._pending_requests[uuid] = 'models'
 
-        # Styles
-        self.style_fetcher.dataFetched.connect(self.style_fetched)
-        self.style_fetcher.fetchFailed.connect(self.style_fetch_error)
+    @Slot()
+    def get_vaes(self):
+        """Fetch available VAEs"""
+        uuid = self.info_fetcher.fetch_vaes()
+        self._pending_requests[uuid] = 'vaes'
 
-        # Upscaler
-        self.upscaler_fetcher.dataFetched.connect(self.upscaler_fetched)
-        self.upscaler_fetcher.fetchFailed.connect(self.upscaler_fetch_error)
+    @Slot()
+    def get_embeddings(self):
+        """Fetch loaded embeddings"""
+        uuid = self.info_fetcher.fetch_embeddings()
+        self._pending_requests[uuid] = 'embeddings'
 
-        # VAE
-        self.vae_fetcher.dataFetched.connect(self.vae_fetched)
-        self.vae_fetcher.fetchFailed.connect(self.vae_fetch_error)
+    @Slot()
+    def get_loras(self):
+        """Fetch available LoRAs"""
+        uuid = self.info_fetcher.fetch_loras()
+        self._pending_requests[uuid] = 'loras'
 
-    def fetch_style(self):
-        self.style_fetcher.fetch()
+    @Slot()
+    def get_styles(self):
+        """Fetch prompt styles"""
+        uuid = self.info_fetcher.fetch_styles()
+        self._pending_requests[uuid] = 'styles'
 
-    def fetch_upscaler(self):
-        self.upscaler_fetcher.fetch()
+    @Slot()
+    def get_upscalers(self):
+        """Fetch available upscalers"""
+        uuid = self.info_fetcher.fetch_upscalers()
+        self._pending_requests[uuid] = 'upscalers'
 
-    def fetch_vae(self):
-        self.vae_fetcher.fetch()
+    @Slot()
+    def get_samplers(self):
+        """Fetch available samplers"""
+        uuid = self.info_fetcher.fetch_samplers()
+        self._pending_requests[uuid] = 'samplers'
 
-    def fetch_sampler(self):
-        self.sampler_fetcher.fetch()
+    @Slot(int)
+    def start_progress_monitoring(self, interval_ms=500):
+        """Begin tracking generation progress"""
+        self.progress_tracker.start_monitoring(interval_ms)
 
-    def fetch_model(self):
-        self.checkpoint_fetcher.fetch()
+    @Slot()
+    def stop_progress_monitoring(self):
+        """Stop progress updates"""
+        self.progress_tracker.stop_monitoring()
 
-    def fetch_embedding(self):
-        self.embedding_fetcher.fetch()
+    # === Internal Handlers ===
+    def _handle_response(self, data: Dict[str, Any], request_uuid: str):
+        """Route successful responses to appropriate signals"""
+        endpoint = self._pending_requests.pop(request_uuid, None)
 
-    def fetch_hypernetwork(self):
-        self.hypernetwork_fetcher.fetch()
+        if not endpoint:
+            return
 
-    def fetch_lora(self):
-        self.lora_fetcher.fetch()
+        if endpoint == 'models':
+            self.checkpoint_fetched.emit(data)
+        elif endpoint == 'vaes':
+            self.vae_fetched.emit(data)
+        elif endpoint == 'embeddings':
+            self.embedding_fetched.emit(data)
+        elif endpoint == 'loras':
+            self.lora_fetched.emit(data)
+        elif endpoint == 'styles':
+            self.style_fetched.emit(data)
+        elif endpoint == 'upscalers':
+            self.upscaler_fetched.emit(data)
+        elif endpoint  == 'samplers':
+            self.sampler_fetched.emit(data)
 
+    def _handle_error(self, error_msg: str, status_code: int, request_uuid: str):
+        """Route errors to appropriate signals"""
+        endpoint = self._pending_requests.pop(request_uuid, None)
+
+        if not endpoint:
+            return
+
+        if endpoint == 'models':
+            self.checkpoint_fetch_error.emit(error_msg, status_code)
+        elif endpoint == 'vaes':
+            self.vae_fetch_error.emit(error_msg, status_code)
+        elif endpoint == 'embeddings':
+            self.embedding_fetch_error.emit(error_msg, status_code)
+        elif endpoint == 'loras':
+            self.lora_fetch_error.emit(error_msg, status_code)
+        elif endpoint == 'styles':
+            self.style_fetch_error.emit(error_msg, status_code)
+        elif endpoint == 'upscalers':
+            self.upscaler_fetch_error.emit(error_msg, status_code)
+        elif endpoint == 'samplers':
+            self.sampler_fetch_error.emit(error_msg, status_code)
 
     #generate helper
     def generate_txt_image(self, payload: dict):
-        self.generate_image(payload, endpoint="txt2img")
+        if self.gen_status:
+            return
+        self.image_generator.txt2img(payload)
 
     def generate_img2img_image(self, payload: dict):
-        self.generate_image(payload, endpoint="img2img")
-
-    #generate image
-    def generate_image(self, payload: dict, endpoint: str = "txt2img"):
-        """Generate an image asynchronously using the specified SD API endpoint."""
-        url = f"{self.base_url}/sdapi/v1/{endpoint}"
-        request = QNetworkRequest(QUrl(url))
-        request.setHeader(QNetworkRequest.ContentTypeHeader, "application/json")
-        json_payload = QByteArray(json.dumps(payload).encode('utf-8'))
-
-        self.active_generation = True
-        self.progress_timer.start(self.progress_update_time)
-        self.network_manager.post(request, json_payload)
-
-    def _check_progress(self):
-        """Check the current generation progress."""
-        if not self.active_generation:
-            self.progress_timer.stop()
+        if self.gen_status:
             return
-
-        self.progress_fetcher.fetch(force_fetch=True)
-
-    def on_progress_updated(self, data):
-        """Handle progress updates."""
-
-        progress = data.get("progress", 0.0)
-
-        # Stop checking progress if generation is complete
-        if progress >= 1.0 or not self.active_generation:
-            self.active_generation = False
-        else:
-            self.image_progress_updated.emit(data)
-
-
-    @Slot(QNetworkReply)
-    def _on_request_finished(self, reply):
-        """Handle API responses."""
-        try:
-            url = reply.url().toString()
-            response_data = json.loads(bytes(reply.readAll().data()).decode('utf-8'))
-            if "sdapi/v1/txt2img" in url:
-                # Handle image generation response
-                self.active_generation = False
-                if "images" in response_data and response_data["images"]:
-                    self.image_generated.emit(response_data)
-                else:
-                    self.image_generation_error.emit("No image returned from API")
-
-        except json.JSONDecodeError:
-            self.image_generation_error.emit("Invalid JSON response from server")
-        except Exception as e:
-            self.image_generation_error.emit(f"Unexpected error: {str(e)}")
-        finally:
-            reply.deleteLater()
+        self.image_generator.img2img(payload)
 
     # Synchronous versions
     def generate_sync(self, payload: dict, endpoint: str):
         """Synchronous version that blocks until response is received."""
-        loop = QEventLoop()
-        result = [None]
-        error = [None]
+        self.image_generator.generate_sync(payload, endpoint)
 
-        def on_success(img_data):
-            result[0] = img_data
-            loop.quit()
+    def gen_started(self):
+        self.active_generation = True
+        self.progress_tracker.start_monitoring()
 
-        def on_error(err_msg):
-            error[0] = ValueError(err_msg)
-            loop.quit()
+    @property
+    def gen_status(self):
+        return self.active_generation
 
-        self.image_generated.connect(on_success)
-        self.image_generation_error.connect(on_error)
-
-        self.generate_image(payload, endpoint=endpoint)
-        loop.exec()
-
-        self.image_generated.disconnect(on_success)
-        self.image_generation_error.disconnect(on_error)
-
-        if error[0] is not None:
-            raise error[0]
-        return result[0]
+    @property
+    def _pending_requests(self) -> Dict[str, str]:
+        """Lazy initialization of request tracking dict"""
+        if not hasattr(self, '_internal_pending'):
+            self._internal_pending = {}
+        return self._internal_pending
 
 
-api_manager = StableDiffusionAPI()
+sd_api_manager = StableDiffusionAPI()
 
 if __name__ ==  "__main__":
     from PySide6.QtWidgets import QApplication
@@ -231,7 +233,8 @@ if __name__ ==  "__main__":
         "width": 512,
         "height": 512,
     }
-    # api_manager.generate_txt_image(payload)
-    api_manager.generate_txt_image(payload)
-
+    # sd_api_manager.generate_txt_image(payload)
+    sd_api_manager.image_progress_updated.connect(lambda data: print(data.keys()))
+    sd_api_manager.style_fetched.connect(lambda data: print(len(data)))
+    sd_api_manager.get_styles()
     app.exec()

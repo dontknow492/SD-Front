@@ -9,7 +9,7 @@ from utils import IconManager
 from gui.common import (
     VerticalFrame, ThemedToolButton, HorizontalFrame, ImageViewer, FlowFrame
 )
-from api import api_manager
+from api import sd_api_manager
 from loguru import logger
 from config import Placeholder
 

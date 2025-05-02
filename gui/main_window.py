@@ -8,7 +8,7 @@ from gui.common import HoverSplitter
 from gui.interface import GalleryInterface
 from gui.interface import TxtOptionWindow, ExtraOptionWindow, ControlOptionWindow, ImgOptionWindow
 from loguru import logger
-from api import api_manager
+from api import sd_api_manager
 from utils import IconManager
 
 from gui.elements import ImageBox, ImageInputBox
@@ -34,7 +34,7 @@ class SDFront(FluentWindow):
         self.setWindowTitle("SD Front")
 
         # self._init_window()
-        # self.sd_api = api_manager
+        # self.sd_api = sd_api_manager
 
 
         self.spliter = HoverSplitter(orientation=Qt.Orientation.Horizontal)
@@ -62,7 +62,7 @@ class SDFront(FluentWindow):
 
         self._init_ui()
         self._init_navigation()
-        api_manager.fetch_sampler()
+        sd_api_manager.get_samplers()
         self._signal_listener()
 #
     def _init_ui(self):
@@ -105,9 +105,9 @@ class SDFront(FluentWindow):
         self.addSubInterface(self.settings_interface, FluentIcon.SETTING, "Settings", position=NavigationItemPosition.BOTTOM)
 
     def _signal_listener(self):
-        api_manager.image_progress_updated.connect(self.on_generation_progress)
-        api_manager.image_generated.connect(self.on_generation_finished)
-        api_manager.image_generation_error.connect(self.on_generation_error)
+        sd_api_manager.image_progress_updated.connect(self.on_generation_progress)
+        sd_api_manager.image_generated.connect(self.on_generation_finished)
+        sd_api_manager.image_generation_error.connect(self.on_generation_error)
         self.output_image.generate_image.connect(self._on_image_generate)
 
     def option_switch(self, option):
@@ -125,7 +125,7 @@ class SDFront(FluentWindow):
             logger.debug("Text Generate")
             payload = self.text_interface.get_payload()
             # print(payload)
-            api_manager.generate_txt_image(payload)
+            sd_api_manager.generate_txt_image(payload)
         elif current_widget == self.image_interface:
             logger.debug("Image Generate")
         elif current_widget == self.controls_interface:
