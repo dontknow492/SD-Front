@@ -123,6 +123,10 @@ class ImageGenerator(QObject):
         finally:
             reply.deleteLater()
 
+    # def cancel_generation(self):
+        """Cancel any ongoing generation."""
+        # self.network_manager.
+
 
 if __name__ == "__main__":
     from PySide6.QtWidgets import QApplication

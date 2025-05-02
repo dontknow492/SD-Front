@@ -1,19 +1,22 @@
+import base64
+
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QCursor
+from PySide6.QtGui import QCursor, QPixmap
 
 from PySide6.QtWidgets import (
     QApplication
 )
-from qfluentwidgets import FluentIcon, ToggleToolButton, TogglePushButton, FluentIconBase
+from qfluentwidgets import FluentIcon, ToggleToolButton, TogglePushButton, FluentIconBase, ImageLabel
 from utils import IconManager
 from gui.common import (
-    VerticalFrame, ThemedToolButton, HorizontalFrame, ImageViewer, FlowFrame
+    VerticalFrame, ThemedToolButton, HorizontalFrame, ImageViewer, FlowFrame, HorizontalScrollWidget
 )
 from api import sd_api_manager
 from loguru import logger
 from config import Placeholder
 
 from gui.components import ProgressWidget
+from utils import base64_pixmap
 
 def create_themed_tool_button(icon: FluentIconBase, tooltip: str = None, cursor: QCursor | Qt.CursorShape = Qt.CursorShape.PointingHandCursor):
     button = ThemedToolButton(icon)
@@ -22,7 +25,7 @@ def create_themed_tool_button(icon: FluentIconBase, tooltip: str = None, cursor:
     button.setCursor(cursor)
     return button
 
-class ImageBox(VerticalFrame):
+class OutputImageBox(VerticalFrame):
     generate_image = Signal()
     reprocess_image = Signal()
     skip_generation = Signal()
@@ -66,7 +69,6 @@ class ImageBox(VerticalFrame):
         # Set up the graphics view and scene
         self.view = ImageViewer(self)
         self.view.setPixmapTransformationMode(Qt.TransformationMode.FastTransformation)
-        self.view.set_drop(False)
 
         #extra options
         extra_option_container = HorizontalFrame(self)
@@ -96,6 +98,13 @@ class ImageBox(VerticalFrame):
         self.addWidget(container)
         self.addWidget(self.view, stretch=1)
         self.addWidget(extra_option_container, alignment=Qt.AlignmentFlag.AlignHCenter)
+
+        #overlay_small_preview:
+        self.small_preview = HorizontalScrollWidget(None, self.view)
+        self.small_preview.setFixedWidth(self.view.width())
+        self.small_preview.setStyleSheet("background-color: rgba(0, 0, 0, 200);")
+        self.small_preview.setContentSpacing(10)
+        self.small_preview.setFixedHeight(100)
 
 
 
@@ -127,10 +136,14 @@ class ImageBox(VerticalFrame):
         logger.debug("Image Generated")
         image_data = image_data["images"]
         self.view.setPixmapTransformationMode(Qt.TransformationMode.SmoothTransformation)
-        self.view.display_base64_images(image_data)
+        # self.view.display_base64_image(image_data[0])
+        for index, image in enumerate(image_data):
+            self._add_preview(image, not index)
+
         self.generate_button.setChecked(False)
         self.on_generate_toggled(False)
         self.progress_widget.setVisible(False)
+
         # self.set_image(image_data)
 
     def on_error(self, error: str):
@@ -141,12 +154,40 @@ class ImageBox(VerticalFrame):
     #     self.view.display_base64_image(image_data)
 
 
+    def _add_preview(self, image_data, is_selected: bool = True):
+        pixmap = base64_pixmap(image_data)
+        if not pixmap:
+            return
+        if is_selected:
+            self.view.set_pixmap(pixmap)
+        card = ImageLabel(pixmap, self.small_preview)
+        card.setCursor(Qt.CursorShape.PointingHandCursor)
+        card.clicked.connect(lambda: self.view.set_pixmap(pixmap))
+        card.setFixedSize(100, 100)
+        card.setScaledContents(True)
+
+        self.small_preview.addWidget(card)
+
+    def reset_preview(self):
+        self.small_preview.clear()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.small_preview.setFixedWidth(self.view.width())
+        self.small_preview.move(0, self.view.height() - self.small_preview.height())
+
+
 
 
 if __name__ == "__main__":
+    import json
     app = QApplication([])
-    window = ImageBox()
-    window.on_error("Error")
-    window.generate_image.connect(lambda: print("Generate Image"))
+    window = OutputImageBox()
+    with open(r"D:\Program\SD Front\data.json", 'r') as file:
+        data = json.load(file)
+
+    window.on_finished(data)
+    # window.on_error("Error")
+    # window.generate_image.connect(lambda: print("Generate Image"))
     window.show()
     app.exec()

@@ -8,10 +8,11 @@ from .myScroll import VerticalScrollWidget, HorizontalScrollWidget, FlowScrollWi
 from .text_box import MyTextEdit
 from .stacked_widget import SegmentedStackedWidget
 from .splitter import HoverSplitter
-from .graphic_view import ImageViewer
+from .graphic_view import ImageViewer, InputImageViewer
 from .table_wiget import DictTableWidget
 from .tab_widget import MyTabWidget
 from .progress_bar import MyProgressBar
 from .collapsible import CollapsibleBase
 from .spinner import WaitingSpinner
 from .loading_overlay import LoadingOverlay
+from .navigation_widget import NaviAvatarWidget

@@ -1,17 +1,19 @@
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QUrl
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QHBoxLayout, QFrame, QVBoxLayout
 from qfluentwidgets import FluentWindow, SubtitleLabel, setFont, FluentIcon, NavigationItemPosition, \
     PopUpAniStackedWidget, \
     NavigationToolButton, FluentIconBase, NavigationPushButton, NavigationBarPushButton
+from qasync import asyncClose
 
 from gui.common import HoverSplitter
 from gui.interface import GalleryInterface
 from gui.interface import TxtOptionWindow, ExtraOptionWindow, ControlOptionWindow, ImgOptionWindow
 from loguru import logger
 from api import sd_api_manager
-from utils import IconManager
-
-from gui.elements import ImageBox, ImageInputBox
+from utils import IconManager,  save_sdwebui_image_with_info
+from gui.elements import OutputImageBox, ImageInputBox
+from gui.common import NaviAvatarWidget
 
 class Widget(QFrame):
 
@@ -32,7 +34,7 @@ class SDFront(FluentWindow):
         super().__init__(*args, **kwargs)
 
         self.setWindowTitle("SD Front")
-
+        self._current_image_gen = None
         # self._init_window()
         # self.sd_api = sd_api_manager
 
@@ -40,7 +42,7 @@ class SDFront(FluentWindow):
         self.spliter = HoverSplitter(orientation=Qt.Orientation.Horizontal)
         self.spliter.setHandleWidth(2)
 
-        self.output_image = ImageBox(self.spliter)
+        self.outputImageView = OutputImageBox(self.spliter)
         self.input_image = ImageInputBox(self.spliter)
         self.option_stack = PopUpAniStackedWidget(self.spliter)
 
@@ -62,8 +64,9 @@ class SDFront(FluentWindow):
 
         self._init_ui()
         self._init_navigation()
-        sd_api_manager.get_samplers()
         self._signal_listener()
+        sd_api_manager.get_samplers()
+        sd_api_manager.check_server_status()
 #
     def _init_ui(self):
         self.option_stack.addWidget(self.text_interface)
@@ -73,7 +76,7 @@ class SDFront(FluentWindow):
 
         self.spliter.addWidget(self.option_stack)
         self.spliter.addWidget(self.input_image)
-        self.spliter.addWidget(self.output_image)
+        self.spliter.addWidget(self.outputImageView)
 
 
         self.spliter.setStretchFactor(0, 0)
@@ -102,13 +105,20 @@ class SDFront(FluentWindow):
         txt_button.setSelected(True)
 
         self.addSubInterface(self.gallery_interface, FluentIcon.ALBUM, "Gallery")
+        #bottom
+        self.server_avatar_widget = NaviAvatarWidget()
+        self.server_avatar_widget.text = sd_api_manager.url
+        navigation_bar.addWidget("server", self.server_avatar_widget, self.open_in_web, NavigationItemPosition.BOTTOM, "Open in Web", None)
         self.addSubInterface(self.settings_interface, FluentIcon.SETTING, "Settings", position=NavigationItemPosition.BOTTOM)
 
     def _signal_listener(self):
         sd_api_manager.image_progress_updated.connect(self.on_generation_progress)
         sd_api_manager.image_generated.connect(self.on_generation_finished)
         sd_api_manager.image_generation_error.connect(self.on_generation_error)
-        self.output_image.generate_image.connect(self._on_image_generate)
+        sd_api_manager.server_status_changed.connect(self.server_avatar_widget.set_status)
+
+        self.outputImageView.generate_image.connect(self._on_image_generate)
+
 
     def option_switch(self, option):
         self.switchTo(self.spliter)
@@ -121,24 +131,45 @@ class SDFront(FluentWindow):
 
     def _on_image_generate(self):
         current_widget = self.option_stack.currentWidget()
+        self.outputImageView.reset_preview()
         if current_widget == self.text_interface:
             logger.debug("Text Generate")
             payload = self.text_interface.get_payload()
+            self._current_image_gen = 'txt2img'
             # print(payload)
             sd_api_manager.generate_txt_image(payload)
         elif current_widget == self.image_interface:
             logger.debug("Image Generate")
+            self._current_image_gen = 'img2img'
         elif current_widget == self.controls_interface:
             logger.debug("Controls Generate")
+            self._current_image_gen = 'controls'
         elif current_widget == self.extras_interface:
             logger.debug("Extras Generate")
+            self._current_image_gen = 'extras'
 
     def on_generation_progress(self, progress: dict):
-        self.output_image.on_progress(progress)
+        self.outputImageView.on_progress(progress)
 
     def on_generation_finished(self, image_data: dict):
-        self.output_image.on_finished(image_data)
+        self.outputImageView.on_finished(image_data)
+        #todo: make it dynamic(based on config).
+        if save_sdwebui_image_with_info(image_data, f"outputs/{self._current_image_gen}"):
+            logger.info("Image saved successfully")
+        else:
+            logger.error("Failed to save image")
 
     def on_generation_error(self, error: str):
         logger.error(f"Error Generating image: {error}")
-        self.output_image.on_error(error)
+        self.outputImageView.on_error(error)
+
+
+    def open_in_web(self):
+        url = sd_api_manager.url
+        QDesktopServices.openUrl(QUrl(url))
+
+
+    # @asyncClose
+    # def closeEvent(self, event):
+    #     sd_api_manager.close()
+    #     super().closeEvent(event)

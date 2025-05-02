@@ -60,7 +60,6 @@ class DictTableWidget(TableWidget):
             return
 
         row = self.rowCount()
-        logger.info(f"Adding row {row} for key {key}")
         self.setRowCount(row + 1)
         self.keys.append(key_lower)
         self.row_map[key_lower] = row
@@ -105,7 +104,6 @@ class DictTableWidget(TableWidget):
             return
 
         row = self.row_map[key_lower]
-        logger.info(f"Updating row {row} for key {key}")
 
         # Remove the old value widget and clean up
         old_widget = self.cellWidget(row, 1)

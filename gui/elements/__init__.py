@@ -6,7 +6,7 @@ from .detailer_box import DetailerBox
 from .correction_box import CorrectionBox
 from .advance_box import AdvanceBox
 from .seed_box import SeedBox
-from .image_box import ImageBox
+from .image_box import OutputImageBox
 from .resize_box import ResizeBox
 from .denoise_box import DenoiseBox
 from .mask_box import MaskBox

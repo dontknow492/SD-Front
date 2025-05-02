@@ -8,7 +8,8 @@ import subprocess
 import sys
 import zipfile
 from datetime import datetime
-from typing import List, Dict, Any
+from pprint import pprint
+from typing import List, Dict, Any, Tuple, Optional
 import io
 
 import piexif
@@ -16,6 +17,9 @@ import piexif.helper
 import xxhash
 from PIL import Image
 from pathlib import Path
+
+from PIL.ImageQt import QPixmap
+from PySide6.QtCore import QByteArray
 from loguru import logger
 from utils.tools import to_abs_path, normalize_paths, cwd
 
@@ -132,7 +136,15 @@ def hash_file(file_path: str) -> str:
 
 
 
+def base64_pixmap(image_data: str)->Optional[QPixmap]:
+    image_bytes = base64.b64decode(image_data)
+    pixmap = QPixmap()
 
+    if not pixmap.loadFromData(QByteArray(image_bytes)):
+        print("Failed to load image from base64.")
+        return None
+
+    return pixmap
 
 
 
@@ -174,30 +186,231 @@ def save_image_as(old_path: str, new_path: str):
         return None
 
 
-def save_sdwebui_jpg(image_data: str, generation_info: str, output_path: str):
+def get_next_index(directory: str, padding: int = 5, extensions: Tuple[str, ...] = (".jpg", ".png")) -> str:
     """
-    Save an image from SD WebUI API with generation info embedded into EXIF UserComment.
+    Get the next available index for an image file (e.g., '00001').
 
     Args:
-        image_data (str): Base64-encoded image data (usually from API).
-        generation_info (str): Text containing generation parameters (prompt, seed, steps, etc).
-        output_path (str): Path to save the JPEG file.
+        directory: Directory to scan for existing files.
+        padding: Number of digits to pad the index with zeros.
+        extensions: Tuple of file extensions to consider (case-insensitive).
+
+    Returns:
+        A zero-padded string representing the next index.
+
+    Raises:
+        OSError: If the directory cannot be accessed.
     """
-    # Decode base64 image data
-    image_bytes = base64.b64decode(image_data)
-    image = Image.open(io.BytesIO(image_bytes))
+    try:
+        if not os.path.isdir(directory):
+            raise OSError(f"Directory does not exist: {directory}")
 
-    # Prepare EXIF UserComment
-    exif_dict = {"Exif": {piexif.ExifIFD.UserComment: generation_info.encode('utf-8')}}
-    exif_bytes = piexif.dump(exif_dict)
+        # List files with specified extensions
+        existing_files = [
+            f for f in os.listdir(directory)
+            if any(f.lower().endswith(ext.lower()) for ext in extensions)
+        ]
+        numbers = []
+        for name in existing_files:
+            parts = name.split("-")
+            if parts and parts[0].isdigit():
+                numbers.append(int(parts[0]))
 
-    # Save as JPEG with EXIF metadata
-    image.convert("RGB").save(output_path, "JPEG", exif=exif_bytes)
+        next_index = max(numbers, default=-1) + 1
+        return str(next_index).zfill(padding)
+    except OSError as e:
+        logger.error(f"Failed to scan directory {directory}: {e}")
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error in get_next_index: {e}")
+        raise
 
-    print(f"Saved image with generation info to {output_path}")
+def format_date(timestamp: str, input_format: str = "%Y%m%d%H%M%S", output_format: str = "%Y-%m-%d") -> str:
+    """
+    Format a timestamp string to a specified output format.
+
+    Args:
+        timestamp: The input timestamp string.
+        input_format: The format of the input timestamp (default: YYYYMMDDHHMMSS).
+        output_format: The desired output format (default: YYYY-MM-DD).
+
+    Returns:
+        The formatted date string, or 'unknown-date' if parsing fails.
+    """
+    try:
+        dt = datetime.strptime(timestamp, input_format)
+        return dt.strftime(output_format)
+    except ValueError:
+        logger.warning(f"Invalid timestamp format: {timestamp}")
+        return "unknown-date"
+    except Exception as e:
+        logger.error(f"Unexpected error in format_date: {e}")
+        return "unknown-date"
+
+def save_sdwebui_image_with_info(
+    response: Dict[str, Any],
+    output_dir: str,
+    save_txt: bool = True,
+    image_format: str = "JPEG",
+    filename_template: str = "{index}-{date}-{model}"
+) -> bool:
+    """
+    Save images from an SD WebUI API response with metadata and auto-naming.
+    Supports batch processing of multiple images in the response.
+
+    Args:
+        response: SD WebUI API response containing 'images' and 'info'.
+        output_dir: Directory to save images and optional metadata files.
+        save_txt: Whether to save the infotext string to a .txt file.
+        image_format: Image format to save ('JPEG' or 'PNG').
+        filename_template: Template for filename (e.g., '{index}-{date}-{model}', supports '{counter}').
+
+    Returns:
+        True if all images were saved successfully, False if any failed.
+
+    Raises:
+        ValueError: If the response is invalid or missing required fields.
+        OSError: If file operations fail (e.g., no write permission).
+    """
+    try:
+        # Validate inputs
+        os.makedirs(output_dir, exist_ok=True)
+        if not isinstance(response, dict) or "images" not in response or not response["images"]:
+            raise ValueError("Invalid response: 'images' field is missing or empty")
+        if not os.access(output_dir, os.W_OK):
+            raise OSError(f"No write permission for directory: {output_dir}")
+        if image_format.upper() not in ("JPEG", "PNG"):
+            raise ValueError(f"Unsupported image format: {image_format}")
+        # Validate filename template (optional, warn if placeholders missing)
+        if "{index}" not in filename_template:
+            logger.warning("Filename template missing '{index}' placeholder")
+
+
+
+        # Parse infotext and info
+        info_raw = response.get("info", "")
+        try:
+            info_dict = json.loads(info_raw) if isinstance(info_raw, str) else info_raw
+        except json.JSONDecodeError:
+            logger.warning("Invalid JSON in response 'info' field")
+            info_dict = {}
+
+        infotexts = info_dict.get("infotexts", [])
+        # Use first infotext as default, or per-image if available
+        default_infotext = infotexts[0] if infotexts else ""
+        model_name = fetch_model_name(default_infotext)
+        job_timestamp = info_dict.get("job_timestamp", "")
+        date_str = format_date(job_timestamp)
+
+        # Sanitize model_name for filename
+        model_name = re.sub(r'[^\w\-]', '_', model_name)
+
+        # Get base index for the batch
+        base_index = int(get_next_index(output_dir, extensions=(".jpg", ".png")))
+        extension = ".jpg" if image_format.upper() == "JPEG" else ".png"
+        all_success = True
+
+        # Prepare EXIF metadata (shared across images unless infotexts vary)
+        exif_dict = {
+            "Exif": {
+                piexif.ExifIFD.UserComment: default_infotext.encode("utf-8", errors="ignore"),
+                piexif.ExifIFD.DateTimeOriginal: job_timestamp.encode("utf-8") if job_timestamp else b"unknown"
+            }
+        }
+        exif_bytes = piexif.dump(exif_dict)
+
+        # Process each image
+        for i, image_base64 in enumerate(response["images"]):
+            try:
+                # Decode image
+                try:
+                    image_data = base64.b64decode(image_base64)
+                    image = Image.open(io.BytesIO(image_data)).convert("RGB")
+                except base64.binascii.Error as e:
+                    logger.error(f"Invalid base64 for image {i}: {e}")
+                    all_success = False
+                    continue
+                except Exception as e:
+                    logger.error(f"Failed to decode image {i}: {e}")
+                    all_success = False
+                    continue
+
+                # Use per-image infotext if available
+                infotext_str = infotexts[i] if i < len(infotexts) else default_infotext
+                if infotext_str != default_infotext:
+                    exif_dict["Exif"][piexif.ExifIFD.UserComment] = infotext_str.encode("utf-8", errors="ignore")
+                    exif_bytes = piexif.dump(exif_dict)
+
+                # Compose filename
+                index_str = str(base_index + i).zfill(5)  # Increment index locally
+                filename = filename_template.format(
+                    index=index_str,
+                    date=date_str,
+                    model=model_name,
+                    counter=str(i).zfill(2)  # Optional counter for batch
+                )
+                img_path = os.path.join(output_dir, filename + extension)
+                txt_path = os.path.join(output_dir, filename + ".txt")
+
+                # Save image
+                try:
+                    image.save(img_path, image_format.upper(), exif=exif_bytes, quality=95)
+                    logger.info(f"Saved image {i} to: {img_path}")
+                except Exception as e:
+                    logger.error(f"Failed to save image {i} to {img_path}: {e}")
+                    all_success = False
+                    continue
+
+                # Save infotext to .txt file
+                if save_txt and infotext_str:
+                    try:
+                        with open(txt_path, "w", encoding="utf-8") as f:
+                            f.write(infotext_str)
+                        logger.info(f"Saved infotext for image {i} to: {txt_path}")
+                    except Exception as e:
+                        logger.error(f"Failed to save infotext for image {i} to {txt_path}: {e}")
+                        all_success = False
+
+            except Exception as e:
+                logger.error(f"Unexpected error processing image {i}: {e}")
+                all_success = False
+
+        return all_success
+
+    except ValueError as e:
+        logger.error(f"Invalid input or data: {e}")
+        return False
+    except OSError as e:
+        logger.error(f"File operation failed: {e}")
+        return False
+    except Exception as e:
+        logger.error(f"Unexpected error in save_sdwebui_image_with_info: {e}")
+        return False
+
+def fetch_model_name(infotext: str) -> str:
+    """
+    Extract the model name from the infotext string.
+
+    Args:
+        infotext: The infotext string from the SD WebUI API response.
+
+    Returns:
+        The model name, or 'unknown-model' if not found.
+    """
+    try:
+        match = re.search(r"Model:\s*([^\s,]+)", infotext, re.IGNORECASE)
+        return match.group(1) if match else "unknown-model"
+    except Exception as e:
+        logger.warning(f"Failed to parse model name from infotext: {e}")
+        return "unknown-model"
 
 
 if __name__ == "__main__":
-    image = Image.open(r"/samples/00024-2025-04-10-hassakuXLIllustrious_v21fix.jpg")
+    with open(fr"D:\Program\SD Front\data.json", "r") as f:
+        data = json.load(f)
+
+    # os.makedirs(r"D:\Program\SD Front\utils\image\cat", exist_ok=True)
+    save_sdwebui_image_with_info(data, r"D:\Program\SD Front\utils\image\cat")
+    # image = Image.open(r"/samples/00024-2025-04-10-hassakuXLIllustrious_v21fix.jpg")
     # print(read_sd_webui_gen_info_from_image(image))
     # print(parse_generation_parameters(read_sd_webui_gen_info_from_image(image)))

@@ -4,6 +4,7 @@ from typing import Optional, Dict, Any, List, Tuple
 
 from PySide6.QtCore import QObject, Signal, QUrl, QTimer, QUrlQuery, QByteArray, QDateTime, Slot
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply, QNetworkDiskCache
+from loguru import logger
 
 
 class BaseFetcher(QObject):
@@ -51,13 +52,13 @@ class BaseFetcher(QObject):
     def _setup_cache(self):
         """Initialize and configure the disk cache"""
         self.cache = QNetworkDiskCache(self)
-        self.cache.setCacheDirectory("sdnext_cache")
+        self.cache.setCacheDirectory(".cache")
         self.cache.setMaximumCacheSize(50 * 1024 * 1024)  # 50MB
         self.manager.setCache(self.cache)
 
     def clear_cache(self):
         """Clear all cached responses"""
-        print(f"Clearing cache. Current size: {self.cache.cacheSize() / 1024 / 1024:.2f} MB")
+        logger.info(f"Clearing cache. Current size: {self.cache.cacheSize() / 1024 / 1024:.2f} MB")
         self.cache.clear()
 
     def fetch(self, endpoint: str, method: str = "GET", headers: Optional[Dict[str, str]] = None,
@@ -65,11 +66,11 @@ class BaseFetcher(QObject):
               timeout_ms: int = 10000, retries: int = 3, use_cache: bool = True) -> str:
         """Main method to initiate a request. Returns a request UUID for tracking."""
         request_uuid = str(uuid.uuid4())
-        print(f"Starting request {request_uuid} for endpoint {endpoint}")
+        logger.debug(f"Starting request {request_uuid} for endpoint {endpoint}")
 
         if endpoint in self._active_requests:
             existing_uuid = self._active_requests[endpoint]
-            print(f"Request {request_uuid} ignored: active request {existing_uuid} for {endpoint}")
+            logger.warning(f"Request {request_uuid} ignored: active request {existing_uuid} for {endpoint}")
             return existing_uuid
 
         # Store metadata including retry count
@@ -92,7 +93,7 @@ class BaseFetcher(QObject):
         """Internal method to execute the actual network request"""
         metadata = self._request_metadata.get(request_uuid)
         if not metadata:
-            print(f"Invalid request UUID: {request_uuid}")
+            logger.exception(f"Invalid request UUID: {request_uuid}")
             return
 
         endpoint = metadata["endpoint"]
@@ -221,14 +222,14 @@ class BaseFetcher(QObject):
 
         # Verify this is still the active request for the endpoint
         if self._active_requests.get(endpoint) != request_uuid:
-            print(f"Ignoring stale response for {endpoint}: {request_uuid}")
+            logger.warning(f"Ignoring stale response for {endpoint}: {request_uuid}")
             reply.deleteLater()
             return
 
         status_code = reply.attribute(QNetworkRequest.HttpStatusCodeAttribute) or 0
         cache_hit = reply.attribute(QNetworkRequest.SourceIsFromCacheAttribute) or False
         self.cacheUsed.emit(cache_hit)
-        print(f"Response for {endpoint} (UUID: {request_uuid}): {'Cache hit' if cache_hit else 'Network fetch'}")
+        logger.info(f"Response for {endpoint} (UUID: {request_uuid}): {'Cache hit' if cache_hit else 'Network fetch'}")
 
         # Handle server availability checks
         if endpoint == self._ENDPOINT_VERSION:
@@ -247,13 +248,32 @@ class BaseFetcher(QObject):
 
         # Handle errors (including network errors and server errors)
         if reply.error() != QNetworkReply.NoError or status_code >= 500:
+            error_code = reply.error()
             error_msg = self._get_error_message(reply, status_code)
             metadata = self._request_metadata.get(request_uuid, {})
+
+            if error_code == QNetworkReply.ConnectionRefusedError:
+                error_msg = "Connection refused by the server"
+                self.serverAvailable.emit(False)
+            elif error_code == QNetworkReply.HostNotFoundError:
+                error_msg = "Server not found (check your base URL)"
+                self.serverAvailable.emit(False)
+            elif error_code == QNetworkReply.TimeoutError:
+                error_msg = "Request timed out (server may be down or unreachable)"
+                self.serverAvailable.emit(False)
+            elif error_code == QNetworkReply.ContentNotFoundError:
+                error_msg = "Requested resource not found on server (404)"
+            elif error_code == QNetworkReply.ContentAccessDenied:
+                error_msg = "Access denied to the resource (403)"
+            elif error_code == QNetworkReply.InternalServerError:
+                error_msg = "Internal server error (500)"
+            elif error_code != QNetworkReply.NoError:
+                error_msg = f"Network error {error_code}: {reply.errorString()}"
 
             # Attempt retry if configured
             if metadata.get("retries_left", 0) > 0:
                 metadata["retries_left"] -= 1
-                print(f"Retrying request {request_uuid} ({metadata['retries_left']} retries left)")
+                logger.warning(f"Retrying request {request_uuid} ({metadata['retries_left']} retries left)")
                 self._do_fetch(request_uuid)
                 reply.deleteLater()
                 return
@@ -350,7 +370,7 @@ class BaseFetcher(QObject):
 
         for endpoint in endpoints:
             request_uuid = self.fetch(endpoint=endpoint)
-            print(f"Warming up cache for {endpoint} (UUID: {request_uuid})")
+            logger.info(f"Warming up cache for {endpoint} (UUID: {request_uuid})")
 
     # Simplified endpoint methods using constants
     def fetch_models(self, timeout_ms: int = 10000, use_cache: bool = True) -> str:
@@ -509,6 +529,7 @@ class ProgressTracker(QObject):
         self.stalled.emit()
         if self._active:
             self._poll()
+
 
 
 if __name__ == "__main__":

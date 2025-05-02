@@ -11,7 +11,7 @@ from PySide6.QtCore import Signal, QObject, QSize
 from pathlib import Path
 from pandas import DataFrame
 from utils import scan_and_update_images
-
+import json
 
 class CoverCardManager(QObject):
     size_changed = Signal(QSize)
@@ -405,9 +405,17 @@ class ImageManager(QObject):
         self.executor.shutdown(wait=True)
 
 
+with open("config.json", "r") as config_file:
+    config = json.load(config_file)
 
+scan_dirs = []
 card_manager = CoverCardManager()
-image_manager = ImageManager([r"D:\Program\SD Front\samples\Extras", r"D:\Program\SD Front\samples\Img2Img", r"D:\Program\SD Front\samples\Text2Img"])
+config.get('output_dirs')
+for key, value in config.get('output_dirs', {}).items():
+    scan_dirs.append(value)
+
+image_manager = ImageManager(scan_dirs)
+# asyncio.run(image_manager.refresh())
 # print(image_manager.get_image_metadata(r"D:\AI Art\Images\Text2Img\00001-2025-04-06-hassakuXLIllustrious_v21fix.jpg"))
 
 # image_manager.backup()S

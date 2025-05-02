@@ -1,18 +1,95 @@
 import base64
+from idlelib.tree import wheel_event
 from pathlib import Path
 from typing import Union
 
-from PySide6.QtCore import Qt, QByteArray, QRect, QRectF
+from PySide6.QtCore import Qt, QByteArray, QRect, QRectF, Signal
 from PySide6.QtGui import QColor, QBrush, QPainter, QPixmap, QImage, QFont, QPen, QPainterPath, QIcon
 from PySide6.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QFrame, QFileDialog
 from loguru import logger
 from qfluentwidgets import isDarkTheme, toggleTheme, qconfig
 
+
 from utils import recolorPixmap
 from config import Placeholder
+from utils import base64_pixmap
 
 
-class ImageViewer(QGraphicsView):
+class ImageViewerBase:
+    MIN_ZOOM = 0.1
+    MAX_ZOOM = 10.0
+    imageChanged = Signal()
+    def load_image(self, file_path: Union[str, Path]):
+        """Load an image from a file path."""
+        try:
+            file_path = Path(file_path) if isinstance(file_path, str) else file_path
+            logger.info(f"Loading image from: {file_path}")
+            self.image_path = file_path
+            image = QPixmap(str(self.image_path))
+            self.set_pixmap(image)
+            if image.isNull():
+                raise ValueError("Failed to load image: Image is null")
+        except Exception as e:
+            logger.exception(f"Error loading image: {e}")
+
+    def wheelEvent(self, event):
+        print("asdf")
+        """Handle mouse wheel events for zooming."""
+        if self.current_pixmap is None:
+            return
+        delta = event.angleDelta().y()
+        if delta > 0:
+            self.zoom_in()
+        elif delta < 0:
+            self.zoom_out()
+        event.accept()
+
+
+    def zoom_in(self):
+        """Increase zoom level."""
+        if self.zoom_factor < self.MAX_ZOOM and not self.image_item.pixmap().isNull():
+            self.zoom_factor = min(self.MAX_ZOOM, self.zoom_factor * 1.1)
+            self.scale(1.1, 1.1)
+            # image_size = self.image_item.pixmap().size()
+            # logger.info(f"Image size: {image_size * self.zoom_factor}")
+
+    def zoom_out(self):
+        """Decrease zoom level."""
+        if self.zoom_factor > self.MIN_ZOOM and not self.image_item.pixmap().isNull():
+            self.zoom_factor = max(self.MIN_ZOOM, self.zoom_factor * 0.9)
+            self.scale(0.9, 0.9)
+
+    def display_base64_image(self, image_data: str):
+        pixmap = base64_pixmap(image_data)
+        if pixmap:
+            self.set_pixmap(pixmap)
+
+    def set_pixmap(self, pixmap: QPixmap):
+        if pixmap.isNull():
+            return
+        # self.image_item.setTransformationMode(Qt.TransformationMode.SmoothTransformation)
+        self.image_item.setPixmap(pixmap)
+        self.setSceneRect(pixmap.rect())
+        #
+
+        self.resetTransform()
+        self.zoom_factor = 1.0
+        self.current_pixmap = pixmap
+
+        logger.info(f"Image loaded: {pixmap.width()}x{pixmap.height()}")
+        print(pixmap.width(), pixmap.height(),  self.viewport().width(), self.viewport().height())
+        if pixmap.width() != self.viewport().width() or pixmap.height() != self.viewport().height():
+            self.fitInView(self.image_item, Qt.AspectRatioMode.KeepAspectRatio)
+        self.imageChanged.emit()
+        self.update()
+
+    def resizeEvent(self, event, /):
+        self.fitInView(self.image_item, Qt.AspectRatioMode.KeepAspectRatio)
+
+    def setPixmapTransformationMode(self, mode: Qt.TransformationMode):
+        self.image_item.setTransformationMode(mode)
+
+class ImageViewer(ImageViewerBase, QGraphicsView):
     MIN_ZOOM = 0.1
     MAX_ZOOM = 10.0
     def __init__(self, parent=None):
@@ -24,6 +101,7 @@ class ImageViewer(QGraphicsView):
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setFrameShape(QFrame.Shape.NoFrame)
+        self.setAcceptDrops(False)
 
         self.current_pixmap: QPixmap = None
         self.zoom_factor: float = 1.0
@@ -34,30 +112,10 @@ class ImageViewer(QGraphicsView):
         self.centerOn(self.image_item)
         # self.scene.setBackgroundBrush(Qt.GlobalColor.transparent)
 
-        self.set_drop(True)
         self.viewport().setStyleSheet("border: none; background: none;")
+        self._create_no_image_pixmap()
 
-    def mousePressEvent(self, event, /):
-        super().mousePressEvent(event)
-        if event.button() == Qt.MouseButton.LeftButton and self.acceptDrops():
-            if not self.current_pixmap:
-                self._open_file_dialog()
 
-    def _open_file_dialog(self):
-        """Open a file dialog to select an image file."""
-        file_path, _ = QFileDialog.getOpenFileName(self, "Open Image", "", "Image Files (*.png *.jpg *.jpeg *.bmp *.tiff)")
-        if file_path:
-            self.load_image(file_path)
-
-    def set_drop(self, drop: bool = False):
-        self.setAcceptDrops(drop)
-        if self.current_pixmap is not None:
-            return
-        if drop:
-            self._create_drop_pixmap()
-
-        else:
-            self._create_no_image_pixmap()
 
     def _create_no_image_pixmap(self):
         size = 512
@@ -71,6 +129,34 @@ class ImageViewer(QGraphicsView):
             colored_pixmap = recolorPixmap(pixmap, QColor(100, 100, 100))
 
         self.image_item.setPixmap(colored_pixmap)
+
+
+class InputImageViewer(ImageViewerBase, QGraphicsView):
+    MIN_ZOOM = 0.1
+    MAX_ZOOM = 10.0
+    def __init__(self, parent=None):
+        super(InputImageViewer, self).__init__(parent)
+        self.image_path = None
+        self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
+        self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
+        self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setFrameShape(QFrame.Shape.NoFrame)
+        self.setAcceptDrops(True)
+
+        self.current_pixmap: QPixmap = None
+        self.zoom_factor: float = 1.0
+        self.scene = QGraphicsScene(self)
+        self.setScene(self.scene)
+        self.image_item = QGraphicsPixmapItem()
+        self.scene.addItem(self.image_item)
+        self.centerOn(self.image_item)
+        # self.scene.setBackgroundBrush(Qt.GlobalColor.transparent)
+
+        self.viewport().setStyleSheet("border: none; background: none;")
+        self._create_drop_pixmap()
+
 
     def _create_drop_pixmap(self):
         size = 512
@@ -175,88 +261,23 @@ class ImageViewer(QGraphicsView):
             logger.exception(f"Error handling drop event: {e}")
             event.ignore()
 
-    def load_image(self, file_path: Union[str, Path]):
-        """Load an image from a file path."""
-        try:
-            file_path = Path(file_path) if isinstance(file_path, str) else file_path
-            logger.info(f"Loading image from: {file_path}")
-            self.image_path = file_path
-            image = QPixmap(str(self.image_path))
-            self.set_pixmap(image)
-            if image.isNull():
-                raise ValueError("Failed to load image: Image is null")
-        except Exception as e:
-            logger.exception(f"Error loading image: {e}")
+    def mousePressEvent(self, event, /):
+        super().mousePressEvent(event)
+        if event.button() == Qt.MouseButton.LeftButton and self.acceptDrops():
+            if not self.current_pixmap:
+                self._open_file_dialog()
 
-    def wheelEvent(self, event):
-        """Handle mouse wheel events for zooming."""
-        if self.current_pixmap is None:
-            return
-        delta = event.angleDelta().y()
-        if delta > 0:
-            self.zoom_in()
-        elif delta < 0:
-            self.zoom_out()
-        event.accept()
+    def _open_file_dialog(self):
+        """Open a file dialog to select an image file."""
+        file_path, _ = QFileDialog.getOpenFileName(self, "Open Image", "", "Image Files (*.png *.jpg *.jpeg *.bmp *.tiff)")
+        if file_path:
+            self.load_image(file_path)
 
-    def zoom_in(self):
-        """Increase zoom level."""
-        if self.zoom_factor < self.MAX_ZOOM and not self.image_item.pixmap().isNull():
-            self.zoom_factor = min(self.MAX_ZOOM, self.zoom_factor * 1.1)
-            self.scale(1.1, 1.1)
-            # image_size = self.image_item.pixmap().size()
-            # logger.info(f"Image size: {image_size * self.zoom_factor}")
-
-    def zoom_out(self):
-        """Decrease zoom level."""
-        if self.zoom_factor > self.MIN_ZOOM and not self.image_item.pixmap().isNull():
-            self.zoom_factor = max(self.MIN_ZOOM, self.zoom_factor * 0.9)
-            self.scale(0.9, 0.9)
-
-    def display_base64_image(self, image_data: str):
-        image_bytes = base64.b64decode(image_data)
-        pixmap = QPixmap()
-
-        if not pixmap.loadFromData(QByteArray(image_bytes)):
-            print("Failed to load image from base64.")
-            return
-
-        self.set_pixmap(pixmap)
-
-    def set_pixmap(self, pixmap: QPixmap):
-        if pixmap.isNull():
-            return
-        # self.image_item.setTransformationMode(Qt.TransformationMode.SmoothTransformation)
-        self.image_item.setPixmap(pixmap)
-        self.setSceneRect(pixmap.rect())
-        #
-
-        self.resetTransform()
-        self.zoom_factor = 1.0
-        self.current_pixmap = pixmap
-
-        logger.info(f"Image loaded: {pixmap.width()}x{pixmap.height()}")
-        print(pixmap.width(), pixmap.height(),  self.viewport().width(), self.viewport().height())
-        if pixmap.width() != self.viewport().width() or pixmap.height() != self.viewport().height():
-            self.fitInView(self.image_item, Qt.AspectRatioMode.KeepAspectRatio)
-
-        self.update()
-
-    def resizeEvent(self, event, /):
-        self.fitInView(self.image_item, Qt.AspectRatioMode.KeepAspectRatio)
-
-    def display_base64_images(self, images):
-        image_data = images[0]
-        self.display_base64_image(image_data)
-
-    def setPixmapTransformationMode(self, mode: Qt.TransformationMode):
-        self.image_item.setTransformationMode(mode)
 
 
 if  __name__ == "__main__":
     from PySide6.QtWidgets import QApplication
     app = QApplication([])
-    window = ImageViewer()
-    a = QGraphicsView()
+    window = InputImageViewer()
     window.show()
     app.exec()

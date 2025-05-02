@@ -228,7 +228,7 @@ def parse_generation_parameters(x: str):
 
 if __name__ == "__main__":
     from pprint import pprint
-    image = Image.open(r"D:\Program\SD Front\samples\00024-2025-04-10-hassakuXLIllustrious_v21fix.jpg")
+    # image = Image.open(r"D:\Program\SD Front\utils\image\cat\00001-2025-05-02-unknown-model.jpg")
     # print(read_sd_webui_gen_info_from_image(image))
     image_generation_data = parse_generation_parameters(read_sd_webui_gen_info_from_image(image))
     print(read_sd_webui_gen_info_from_image(image))

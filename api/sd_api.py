@@ -1,5 +1,7 @@
 from typing import Dict, Any
 from PySide6.QtCore import Signal, QObject, Slot, Qt
+from loguru import logger
+
 from api.generator import ImageGenerator
 from api.fetcher import ProgressTracker, BaseFetcher
 
@@ -28,7 +30,7 @@ class StableDiffusionAPI(QObject):
     #img
     image_progress_updated = Signal(dict)
     image_generated = Signal(dict)
-    image_generation_error = Signal(str)
+    image_generation_error = Signal(str, int)
 
     #message
     messageSignal = Signal(str, str) #lvl, msg
@@ -54,9 +56,9 @@ class StableDiffusionAPI(QObject):
     def _signal_mapping(self):
         #image
         self.image_generator.generation_failed.connect(self.image_generation_error.emit)
-        self.image_generator.generation_failed.connect(self.progress_tracker.stop_monitoring)
+        self.image_generator.generation_failed.connect(lambda : self._on_generation_finished())
         self.image_generator.generation_completed.connect(self.image_generated.emit)
-        self.image_generator.generation_completed.connect(self.progress_tracker.stop_monitoring)
+        self.image_generator.generation_completed.connect(lambda : self._on_generation_finished())
         self.image_generator.generation_started.connect(self.gen_started)
         #progress
         self.progress_tracker.progressData.connect(self.image_progress_updated.emit)
@@ -67,6 +69,13 @@ class StableDiffusionAPI(QObject):
 
 
         # === Public API Methods ===
+    @property
+    def url(self):
+        return self.base_url
+
+    @url.setter
+    def url(self, url):
+        self.base_url = url
 
     @Slot()
     def refresh_models(self):
@@ -92,6 +101,11 @@ class StableDiffusionAPI(QObject):
         self.get_embeddings()
         self.get_loras()
         self.get_styles()
+
+    @Slot()
+    def check_server_status(self):
+        """Check if the server is available"""
+        self.info_fetcher.check_server()
 
     @Slot()
     def get_models(self):
@@ -145,6 +159,11 @@ class StableDiffusionAPI(QObject):
         """Stop progress updates"""
         self.progress_tracker.stop_monitoring()
 
+    @Slot()
+    def _on_generation_finished(self):
+        self.active_generation = False
+        self.progress_tracker.stop_monitoring()
+
     # === Internal Handlers ===
     def _handle_response(self, data: Dict[str, Any], request_uuid: str):
         """Route successful responses to appropriate signals"""
@@ -193,11 +212,13 @@ class StableDiffusionAPI(QObject):
     #generate helper
     def generate_txt_image(self, payload: dict):
         if self.gen_status:
+            logger.info("Generation already in progress")
             return
         self.image_generator.txt2img(payload)
 
     def generate_img2img_image(self, payload: dict):
         if self.gen_status:
+            logger.info("Generation already in progress")
             return
         self.image_generator.img2img(payload)
 
@@ -220,6 +241,10 @@ class StableDiffusionAPI(QObject):
         if not hasattr(self, '_internal_pending'):
             self._internal_pending = {}
         return self._internal_pending
+
+    def close(self):
+        self.info_fetcher.cancel()
+        self.progress_tracker.stop_monitoring()
 
 
 sd_api_manager = StableDiffusionAPI()
