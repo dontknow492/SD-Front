@@ -13,6 +13,7 @@ class GFPGANBox(GridFrame):
         self.strength = DoubleSliderCard(
             "GFPFGAN Strength",
             description="Strength of the GFPGAN",
+            show_info_on_focus=True,
             parent=self
         )
 

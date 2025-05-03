@@ -20,6 +20,7 @@ from pathlib import Path
 
 from PIL.ImageQt import QPixmap
 from PySide6.QtCore import QByteArray
+from PySide6.QtGui import QImage
 from loguru import logger
 from utils.tools import to_abs_path, normalize_paths, cwd
 
@@ -145,6 +146,57 @@ def base64_pixmap(image_data: str)->Optional[QPixmap]:
         return None
 
     return pixmap
+
+def pixmap_base64(pixmap: QPixmap, format: str = "JPEG", quality: int = 90) -> str:
+    """
+    Convert QPixmap to a base64-encoded image string.
+
+    Args:
+        pixmap (QPixmap): Input QPixmap to convert.
+        format (str): Output format ("JPEG" or "PNG"). Default is "JPEG".
+        quality (int): JPEG quality (1–100, ignored for PNG). Default is 90.
+
+    Returns:
+        str: Base64-encoded image string.
+
+    Raises:
+        ValueError: If QPixmap is null or invalid.
+        RuntimeError: If conversion fails.
+    """
+    try:
+        # Validate input
+        if pixmap.isNull():
+            raise ValueError("Input QPixmap is null or invalid")
+
+        # Convert to QImage (use RGB32 for efficiency, or RGBA for PNG with alpha)
+        qimage = pixmap.toImage().convertToFormat(
+            QImage.Format_RGBA8888 if format.upper() == "PNG" else QImage.Format_RGB32
+        )
+        if qimage.isNull():
+            raise ValueError("Failed to convert QPixmap to QImage")
+
+        # Get raw pixel data
+        width, height = qimage.width(), qimage.height()
+        byte_count = width * height * (4 if format.upper() == "PNG" else 4)
+        byte_array = qimage.constBits().asarray(byte_count)
+
+        # Create PIL Image
+        mode = "RGBA" if format.upper() == "PNG" else "RGB"
+        decoder = "BGRA" if format.upper() == "PNG" else "BGRX"
+        pil_img = Image.frombytes(mode, (width, height), byte_array, "raw", decoder)
+
+        # Save to bytes buffer
+        with io.BytesIO() as img_byte_arr:
+            if format.upper() == "JPEG":
+                pil_img.save(img_byte_arr, format="JPEG", quality=quality, optimize=True)
+            else:
+                pil_img.save(img_byte_arr, format="PNG")
+            base64_str = base64.b64encode(img_byte_arr.getvalue()).decode("utf-8")
+
+        return base64_str
+
+    except Exception as e:
+        raise RuntimeError(f"Failed to convert QPixmap to base64: {str(e)}")
 
 
 

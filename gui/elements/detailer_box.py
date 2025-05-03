@@ -11,6 +11,7 @@ class DetailerBox(GridFrame):
             description="""Activate this to enable the detail enhancement processor.
             When enabled, the system will apply additional processing to refine image details
             based on the parameters below.""",
+            show_info_on_focus=True,
             parent=self
         )
 
@@ -20,6 +21,7 @@ class DetailerBox(GridFrame):
             Enter one class per line (e.g., 'face', 'hand', 'text').
             Leave empty to process all detectable classes.""",
             placeholder="face\nhand\ntext",
+            show_info_on_focus=True,
             parent=self
         )
 
@@ -29,6 +31,7 @@ class DetailerBox(GridFrame):
             Example: 'high detail skin pores, sharp eyes, detailed hair strands'
             The more specific your prompt, the better the results.""",
             placeholder="high detail skin, sharp facial features",
+            show_info_on_focus=True,
             parent=self
         )
 
@@ -38,6 +41,7 @@ class DetailerBox(GridFrame):
             Example: 'blurry, over-smoothed, plastic look, distorted features'
             Helps prevent common enhancement artifacts.""",
             placeholder="blurry, over-smoothed, distorted",
+            show_info_on_focus=True,
             parent=self
         )
 
@@ -47,6 +51,7 @@ class DetailerBox(GridFrame):
             Lower values (0.1-0.3): Subtle refinement
             Medium values (0.4-0.7): Noticeable improvement
             High values (0.8-1.0): Dramatic enhancement (may introduce artifacts)""",
+            show_info_on_focus=True,
             parent=self
         )
         self.detailer_strength.set_range(0.1, 1.0, 2)
@@ -58,6 +63,7 @@ class DetailerBox(GridFrame):
             10-20 steps: Fast but basic
             20-40 steps: Balanced quality
             40+ steps: Highest quality (slowest)""",
+            show_info_on_focus=True,
             parent=self
         )
         self.detailer_step.set_range(0, 100)
@@ -68,6 +74,7 @@ class DetailerBox(GridFrame):
             description="""Limit how many objects get processed in one image.
             Helps manage processing time in complex scenes.
             Lower values prioritize the most prominent objects.""",
+            show_info_on_focus=True,
             parent=self
         )
         self.max_detect.set_range(0, 10)
@@ -78,6 +85,7 @@ class DetailerBox(GridFrame):
             description="""ExtraInterface margin around detected objects (in pixels).
             Prevents cropping too tightly around edges.
             Increase if details near edges are being clipped.""",
+            show_info_on_focus=True,
             parent=self
         )
         self.edge_padding.set_range(0, 100)
@@ -89,6 +97,7 @@ class DetailerBox(GridFrame):
             Lower values: Sharp transitions
             Higher values: Softer blending
             Helps avoid visible seams between processed and unprocessed areas.""",
+            show_info_on_focus=True,
             parent=self
         )
         self.edge_blur.set_range(0, 100)
@@ -100,6 +109,7 @@ class DetailerBox(GridFrame):
             0.7-0.8: Only very certain detections
             0.5-0.7: Moderate confidence
             Below 0.5: May include false positives""",
+            show_info_on_focus=True,
             parent=self
         )
         self.min_confidence.set_range(0, 1.0, 2)
@@ -112,6 +122,7 @@ class DetailerBox(GridFrame):
             0.7-0.9: Strong enhancement but preserves some original texture
             0.5-0.7: Balanced mix
             Below 0.5: Very subtle effect""",
+            show_info_on_focus=True,
             parent=self
         )
         self.max_overlay.set_range(0, 1.0, 2)
@@ -123,6 +134,7 @@ class DetailerBox(GridFrame):
             Prevents wasting resources on tiny details.
             0.01: 1% of image area
             0.05: 5% of image area (typical face in portrait)""",
+            show_info_on_focus=True,
             parent=self
         )
         self.min_size.set_range(0, 1.0, 2)
@@ -134,6 +146,7 @@ class DetailerBox(GridFrame):
             Prevents over-processing large background elements.
             0.5: 50% of image area
             1.0: No size limit""",
+            show_info_on_focus=True,
             parent=self
         )
         self.max_size.set_range(0, 1.0, 2)
@@ -179,38 +192,26 @@ class DetailerBox(GridFrame):
 
     def set_payload(self, payload: dict):
         """Sets the payload of the detailer box."""
-        if not payload:
+        if not isinstance(payload, dict):
             return
 
-        if "detailer_enabled" in payload:
-            self.enable_detailer.setChecked(payload["detailer_enabled"])
-        if "detailer_prompt" in payload:
-            self.detailer_prompt.setPlainText(payload["detailer_prompt"])
-        if "detailer_negative" in payload:
-            self.detailer_negative_prompt.setPlainText(payload["detailer_negative"])
-        if "detailer_strength" in payload:
-            self.detailer_strength.set_value(payload["detailer_strength"])
-        if "detailer_steps" in payload:
-            self.detailer_step.set_value(payload["detailer_steps"])
+        self.enable_detailer.setChecked(payload.get("detailer_enabled", self.enable_detailer.isChecked()))
+        self.detailer_prompt.setPlainText(payload.get("detailer_prompt", self.detailer_prompt.toPlainText()))
+        self.detailer_negative_prompt.setPlainText(
+            payload.get("detailer_negative", self.detailer_negative_prompt.toPlainText()))
+        self.detailer_strength.set_value(payload.get("detailer_strength", self.detailer_strength.value()))
+        self.detailer_step.set_value(payload.get("detailer_steps", self.detailer_step.value()))
 
         override = payload.get("override_settings", {})
-        if "detailer_classes" in override:
-            self.detailer_classes.setPlainText(override["detailer_classes"])
-        if "detailer_max" in override:
-            self.max_detect.set_value(override["detailer_max"])
-        if "detailer_padding" in override:
-            self.edge_padding.set_value(override["detailer_padding"])
-        if "detailer_blur" in override:
-            self.edge_blur.set_value(override["detailer_blur"])
-        if "detailer_conf" in override:
-            self.min_confidence.set_value(override["detailer_conf"])
-        if "detailer_iou" in override:
-            self.max_overlay.set_value(override["detailer_iou"])
-        if "detailer_min_size" in override:
-            self.min_size.set_value(override["detailer_min_size"])
-        if "detailer_max_size" in override:
-            self.max_size.set_value(override["detailer_max_size"])
 
+        self.detailer_classes.setPlainText(override.get("detailer_classes", self.detailer_classes.toPlainText()))
+        self.max_detect.set_value(override.get("detailer_max", self.max_detect.value()))
+        self.edge_padding.set_value(override.get("detailer_padding", self.edge_padding.value()))
+        self.edge_blur.set_value(override.get("detailer_blur", self.edge_blur.value()))
+        self.min_confidence.set_value(override.get("detailer_conf", self.min_confidence.value()))
+        self.max_overlay.set_value(override.get("detailer_iou", self.max_overlay.value()))
+        self.min_size.set_value(override.get("detailer_min_size", self.min_size.value()))
+        self.max_size.set_value(override.get("detailer_max_size", self.max_size.value()))
 
 
 if __name__  == "__main__":

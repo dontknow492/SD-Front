@@ -16,6 +16,7 @@ class AdvanceBox(GridFrame):
             - None: Bypass VAE processing (faster but lower quality)
 
             Note: Using the correct VAE significantly impacts color accuracy and detail""",
+            show_info_on_focus=True,
             parent=self
         )
 
@@ -26,6 +27,7 @@ class AdvanceBox(GridFrame):
             ✗ Disabled: Standard image generation
 
             Tip: Essential for game textures, wallpaper designs, or any tiled content""",
+            show_info_on_focus=True,
             parent=self
         )
 
@@ -36,6 +38,7 @@ class AdvanceBox(GridFrame):
             ✗ Disabled: Smoother but less detailed results
 
             Warning: Increases VRAM usage by ~15%""",
+            show_info_on_focus=True,
             parent=self
         )
 
@@ -48,6 +51,7 @@ class AdvanceBox(GridFrame):
             <3: Highly unpredictable
 
             Note: Values above 10 often cause artifacts""",
+            show_info_on_focus=True,
             parent=self
         )
         self.guidance_scale.set_range(0, 30)
@@ -62,6 +66,7 @@ class AdvanceBox(GridFrame):
             <0.4: Minimal guidance
 
             Use lower values for more artistic freedom""",
+            show_info_on_focus=True,
             parent=self
         )
         self.guidance_end.set_range(0, 1, 2)
@@ -75,6 +80,7 @@ class AdvanceBox(GridFrame):
             1-3: Subtle tweaks only
 
             Tip: Use higher values when your refine prompt specifies exact details""",
+            show_info_on_focus=True,
             parent=self
         )
         self.refine_guidance_scale.set_range(0, 30)
@@ -88,6 +94,7 @@ class AdvanceBox(GridFrame):
             0.5-0.7: Aggressive dynamic scaling
 
             Helps prevent over-processing in later stages""",
+            show_info_on_focus=True,
             parent=self
         )
         self.rescale_guidance.set_range(0, 1, 2)
@@ -101,6 +108,7 @@ class AdvanceBox(GridFrame):
             0.7-1.0: May over-emphasize specific terms
 
             Lower values create more balanced compositions""",
+            show_info_on_focus=True,
             parent=self
         )
         self.attention_guidance.set_range(0, 1, 2)
@@ -114,6 +122,7 @@ class AdvanceBox(GridFrame):
             0.8-1.0: May cause instability
 
             Helps maintain consistency in long generations""",
+            show_info_on_focus=True,
             parent=self
         )
         self.adaptive_scaling.set_range(0, 1, 2)
@@ -127,6 +136,7 @@ class AdvanceBox(GridFrame):
             3-4: Faster but may misinterpret prompts
 
             Higher values can create more stylized results""",
+            show_info_on_focus=True,
             parent=self
         )
         self.clip_skip.set_range(0, 12, 1)
@@ -162,26 +172,19 @@ class AdvanceBox(GridFrame):
 
     def set_payload(self, payload: dict):
         """Populates the UI from a dict."""
-        if "vae_type" in payload:
-            self.vae_type.setCurrentText(payload["vae_type"])
-        if "tiling" in payload:
-            self.enable_texture_tiling.setChecked(payload["tiling"])
-        if "hidiffusion" in payload:
-            self.enable_hi_diffusion.setChecked(payload["hidiffusion"])
-        if "cfg_scale" in payload:
-            self.guidance_scale.set_value(payload["cfg_scale"])
-        if "cfg_end" in payload:
-            self.guidance_end.set_value(payload["cfg_end"])
-        if "refiner_steps" in payload:
-            self.refine_guidance_scale.set_value(payload["refiner_steps"])
-        if "diffusers_guidance_rescale" in payload:
-            self.rescale_guidance.set_value(payload["diffusers_guidance_rescale"])
-        if "pag_scale" in payload:
-            self.attention_guidance.set_value(payload["pag_scale"])
-        if "pag_adaptive" in payload:
-            self.adaptive_scaling.set_value(payload["pag_adaptive"])
-        if "clip_skip" in payload:
-            self.clip_skip.set_value(payload["clip_skip"])
+        if not isinstance(payload, dict):
+            return
+
+        self.vae_type.setCurrentText(payload.get("vae_type", self.vae_type.currentText()))
+        self.enable_texture_tiling.setChecked(payload.get("tiling", self.enable_texture_tiling.isChecked()))
+        self.enable_hi_diffusion.setChecked(payload.get("hidiffusion", self.enable_hi_diffusion.isChecked()))
+        self.guidance_scale.set_value(payload.get("cfg_scale", self.guidance_scale.value()))
+        self.guidance_end.set_value(payload.get("cfg_end", self.guidance_end.value()))
+        self.refine_guidance_scale.set_value(payload.get("refiner_steps", self.refine_guidance_scale.value()))
+        self.rescale_guidance.set_value(payload.get("diffusers_guidance_rescale", self.rescale_guidance.value()))
+        self.attention_guidance.set_value(payload.get("pag_scale", self.attention_guidance.value()))
+        self.adaptive_scaling.set_value(payload.get("pag_adaptive", self.adaptive_scaling.value()))
+        self.clip_skip.set_value(payload.get("clip_skip", self.clip_skip.value()))
 
 if __name__  == "__main__":
     from PySide6.QtWidgets import QApplication, QWidget

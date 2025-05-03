@@ -16,18 +16,21 @@ class UpscaleBox(GridFrame):
         self.upscaler = ComboBoxCard(
             "Upscaler",
             description="Select the upscaler model",
+            show_info_on_focus=True,
             parent=self
         )
 
         self.refine_upscale = CheckBoxCard(
             "Refine Upscale",
             description="Refine the upscale result",
+            show_info_on_focus=True,
             parent=self
         )
 
         self.upscaler_visibility = DoubleSliderCard(
             "Upscaler Visibility",
             description="Show the upscaler result",
+            show_info_on_focus=True,
             parent=self
         )
 
@@ -35,6 +38,7 @@ class UpscaleBox(GridFrame):
         self.addWidget(self.upscaler)
         self.addWidget(self.refine_upscale)
         self.addFullWidthWidget(self.upscaler_visibility)
+
 
 if  __name__ == "__main__":
     from PySide6.QtWidgets import QApplication, QWidget

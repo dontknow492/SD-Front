@@ -78,7 +78,7 @@ class PromptBox(VerticalFrame):
     def get_negative_prompt(self):
         return self.negative_prompt.get_text()
 
-    def get_payload(self):
+    def get_payload(self)->dict:
         return {
             "prompt": self.get_prompt(),
             "negative_prompt": self.get_negative_prompt(),
@@ -86,12 +86,16 @@ class PromptBox(VerticalFrame):
         }
 
     def set_payload(self, data: dict):
-        if "prompt" in data:
-            self.prompt.set_value(data["prompt"])
-        if "negative_prompt" in data:
-            self.negative_prompt.set_value(data["negative_prompt"])
-        if "styles" in data:
-            self.style_box.setCurrentText(data["styles"][0])
+        if not isinstance(data, dict):
+            return
+        self.prompt.set_value(data.get('prompt', self.prompt.toPlainText()))
+        self.negative_prompt.set_value(data.get('negative_prompt', self.negative_prompt.toPlainText()))
+        style = data.get('styles', [""])[0]
+        if style == "":
+            self.style_box.setCurrentText("")
+        else:
+
+            self.style_box.setCurrentText(style)
 
     def set_styles(self, styles: list[dict]):
         self.style_box.clear()

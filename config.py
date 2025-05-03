@@ -30,3 +30,11 @@ class Placeholder(Enum):
     def icon(self) -> QIcon:
         """Returns a QIcon."""
         return QIcon(self.path())
+
+
+class GenerationTypeFlags(Enum):
+    """Flags for generation status."""
+    TEXT2IMAGE = "txt2img"
+    IMAGE2IMAGE = "img2img"
+    CONTROLS = "controls"
+    EXTRAS = "extras"

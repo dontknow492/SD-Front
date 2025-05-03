@@ -13,7 +13,7 @@ from gui.common import (
 )
 from api import sd_api_manager
 from loguru import logger
-from config import Placeholder
+from config import Placeholder, GenerationTypeFlags
 
 from gui.components import ProgressWidget
 from utils import base64_pixmap
@@ -31,6 +31,8 @@ class OutputImageBox(VerticalFrame):
     skip_generation = Signal()
     pause_generation = Signal()
     stop_generation = Signal()
+
+    sendTo_signal = Signal(GenerationTypeFlags, QPixmap)
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setLayoutMargins(0, 0, 0, 0)
@@ -71,24 +73,26 @@ class OutputImageBox(VerticalFrame):
         self.view.setPixmapTransformationMode(Qt.TransformationMode.FastTransformation)
 
         #extra options
-        extra_option_container = HorizontalFrame(self)
-        self.info_button = create_themed_tool_button(FluentIcon.INFO,  'Info')
-        self.show_button = create_themed_tool_button(FluentIcon.FOLDER,  'Show')
-        self.save_button = create_themed_tool_button(FluentIcon.SAVE,  'Save')
+        self.extra_option_container = HorizontalFrame(self)
+        self.set_enable_extra_controls(False)
+        self.show_button = create_themed_tool_button(FluentIcon.FOLDER,  'Open in Folder')
         self.delete_button = create_themed_tool_button(FluentIcon.DELETE,  'Delete')
         self.send_to_image_button = create_themed_tool_button(IconManager.IMAGE_PEN,  'Send to Img2Img')
         self.send_to_text_button = create_themed_tool_button(IconManager.TEXT_SIZE,  'Send to Txt2Img')
-
+        self.send_to_control_button = create_themed_tool_button(FluentIcon.ROBOT, 'Send to Controls')
+        self.send_to_extras_button = create_themed_tool_button(IconManager.PROCESS_BOX, 'Send to Extras')
         # Add buttons to layout
         for btn in [
-            self.info_button,
             self.show_button,
-            self.save_button,
-            self.delete_button,
             self.send_to_image_button,
             self.send_to_text_button,
+            self.send_to_control_button,
+            self.send_to_extras_button,
+            self.delete_button,
         ]:
-            extra_option_container.addWidget(btn)
+            self.extra_option_container.addWidget(btn)
+
+
 
         # Layout setup
         container.layout().addStretch(1)
@@ -97,7 +101,7 @@ class OutputImageBox(VerticalFrame):
 
         self.addWidget(container)
         self.addWidget(self.view, stretch=1)
-        self.addWidget(extra_option_container, alignment=Qt.AlignmentFlag.AlignHCenter)
+        self.addWidget(self.extra_option_container, alignment=Qt.AlignmentFlag.AlignHCenter)
 
         #overlay_small_preview:
         self.small_preview = HorizontalScrollWidget(None, self.view)
@@ -105,8 +109,13 @@ class OutputImageBox(VerticalFrame):
         self.small_preview.setStyleSheet("background-color: rgba(0, 0, 0, 200);")
         self.small_preview.setContentSpacing(10)
         self.small_preview.setFixedHeight(100)
+        self.hide_preview()
 
-
+    def signal_handler(self):
+        self.send_to_extras_button.clicked.connect(lambda :  self.on_send_to_image(GenerationTypeFlags.EXTRAS))
+        self.send_to_image_button.clicked.connect(lambda :  self.on_send_to_image(GenerationTypeFlags.IMAGE2IMAGE))
+        self.send_to_text_button.clicked.connect(lambda :  self.on_send_to_image(GenerationTypeFlags.EXTRAS))
+        self.send_to_control_button.clicked.connect(lambda :  self.on_send_to_image(GenerationTypeFlags.CONTROLS))
 
     def on_generate_toggled(self, state: bool):
         if state:
@@ -121,6 +130,7 @@ class OutputImageBox(VerticalFrame):
             self.generate_button.setIcon(FluentIcon.PLAY_SOLID)
 
     def on_progress(self, progress: dict):
+        self.extra_option_container.setEnabled(False)
         image = progress["current_image"]
         if image is None:
             logger.debug("No Progress Image Generated")
@@ -167,14 +177,29 @@ class OutputImageBox(VerticalFrame):
         card.setScaledContents(True)
 
         self.small_preview.addWidget(card)
+        #enabling extra controls
+        self.extra_option_container.setEnabled(True)
+        self.show_preview()
 
     def reset_preview(self):
         self.small_preview.clear()
+
+    def hide_preview(self):
+        self.small_preview.hide()
+
+    def show_preview(self):
+        self.small_preview.show()
+
+    def set_enable_extra_controls(self, state: bool):
+        self.extra_option_container.setEnabled(state)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self.small_preview.setFixedWidth(self.view.width())
         self.small_preview.move(0, self.view.height() - self.small_preview.height())
+
+    def on_send_to_image(self, to: GenerationTypeFlags):
+        self.sendTo_signal.emit(to, self.view.current_pixmap)
 
 
 

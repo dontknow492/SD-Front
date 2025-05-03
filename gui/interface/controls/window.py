@@ -29,6 +29,20 @@ class ControlOptionWindow(SegmentedStackedWidget):
     def get_negative_prompt(self):
         return self.prompt_interface.get_negative_prompt()
 
+    def get_payload(self):
+        payload = self.prompt_interface.get_payload()
+        payload.update(self.refine_interface.get_payload())
+        payload.update(self.advance_interface.get_payload())
+        # payload.update(self.ip_adapter_interface.get_payload())
+        #todo: ip adapter payload
+        return payload
+
+    def set_payload(self, payload: dict):
+        self.prompt_interface.set_payload(payload)
+        self.refine_interface.set_payload(payload)
+        self.advance_interface.set_payload(payload)
+        #todo: ip adapter payload
+
 
 if __name__ == "__main__":
     import sys

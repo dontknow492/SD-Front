@@ -37,3 +37,12 @@ Thumbs.db
 *.ini
 *.cfg
 *.toml
+
+#output
+outputs/img2img
+outputs/txt2img
+outputs/extras
+outputs/controls
+
+#random
+data.json

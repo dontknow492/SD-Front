@@ -17,6 +17,15 @@ class ControlRefineInterface(VerticalScrollWidget):
         self.addWidget(detailer_label)
         self.addWidget(self.detailer_box)
 
+    def get_payload(self):
+        payload = self.refine_box.get_payload()
+        payload.update(self.detailer_box.get_payload())
+        return payload
+
+    def set_payload(self, payload: dict):
+        self.refine_box.set_payload(payload)
+        self.detailer_box.set_payload(payload)
+
 if  __name__ == "__main__":
     from PySide6.QtWidgets import QApplication, QWidget
     app = QApplication([])

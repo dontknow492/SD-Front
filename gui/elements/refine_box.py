@@ -17,6 +17,7 @@ class RefineBox(GridFrame):
             - Adding subtle details
             - Improving overall coherence
             Note: Increases processing time but typically yields higher quality results""",
+            show_info_on_focus=True,
             parent=self
         )
 
@@ -28,6 +29,7 @@ class RefineBox(GridFrame):
             - You want maximum detail regardless of input
             - Working with specialized high-res models
             Warning: Significantly increases VRAM usage and processing time""",
+            show_info_on_focus=True,
             parent=self
         )
 
@@ -39,6 +41,7 @@ class RefineBox(GridFrame):
             - LMS: Best for smooth gradients
             - Heun: Highest quality but slow
             Tip: For faces, try DPM++ 2M Karras""",
+            show_info_on_focus=True,
             parent=self
         )
 
@@ -50,6 +53,7 @@ class RefineBox(GridFrame):
             40-60: High quality
             60+: Extreme quality (diminishing returns)
             Higher values reduce artifacts but increase render time""",
+            show_info_on_focus=True,
             parent=self
         )
         self.hires_steps.set_range(0, 100)
@@ -63,6 +67,7 @@ class RefineBox(GridFrame):
             0.7-0.9: Strong enhancement
             1.0: Complete rework
             Adjust based on how much you want to preserve the original""",
+            show_info_on_focus=True,
             parent=self
         )
         self.strength.set_range(0, 1, 2)
@@ -76,6 +81,7 @@ class RefineBox(GridFrame):
             - Stretch: Forces exact size (may distort)
             - Letterbox: Smart padding (recommended for video)
             Best practice: Use 'Crop' for social media, 'Letterbox' for print""",
+            show_info_on_focus=True,
             parent=self
         )
 
@@ -87,6 +93,7 @@ class RefineBox(GridFrame):
             - Bilinear: Fastest but blurry
             - Nearest: Pixel art preservation
             For AI work, Lanczos usually gives best results""",
+            show_info_on_focus=True,
             parent=self
         )
 
@@ -98,6 +105,7 @@ class RefineBox(GridFrame):
             - 1024-1536: High detail
             - 1536+: Professional grade
             Note: Width × Height affects VRAM usage exponentially""",
+            show_info_on_focus=True,
             parent=self
         )
         self.resize_width.set_range(512, 8192)
@@ -111,6 +119,7 @@ class RefineBox(GridFrame):
             - 1024-1536: High detail
             - 1536+: Professional grade
             Maintain aspect ratio for best results""",
+            show_info_on_focus=True,
             parent=self
         )
         self.resize_height.set_range(512, 8192)
@@ -123,6 +132,7 @@ class RefineBox(GridFrame):
             40-60%: Balanced approach (recommended)
             60-80%: Late refinement (preserves composition)
             Earlier starts allow more dramatic changes""",
+            show_info_on_focus=True,
             parent=self
         )
         self.refine_start.set_range(0, 1, 2)
@@ -136,6 +146,7 @@ class RefineBox(GridFrame):
             20-30: Detailed enhancement
             30+: Ultra-refinement
             Allocate more steps for complex scenes""",
+            show_info_on_focus=True,
             parent=self
         )
         self.refine_steps.set_range(0, 100)
@@ -151,6 +162,7 @@ class RefineBox(GridFrame):
             - Quality descriptors
             Keep concise (1-2 lines works best)""",
             placeholder="ultra-detailed, sharp focus, professional color grading",
+            show_info_on_focus=True,
             parent=self
         )
 
@@ -164,6 +176,7 @@ class RefineBox(GridFrame):
             - Maintain original characteristics
             Separate terms with commas""",
             placeholder="blurry, deformed, over-smoothed, jpeg artifacts",
+            show_info_on_focus=True,
             parent=self
         )
 
@@ -212,32 +225,10 @@ class RefineBox(GridFrame):
         }
     def set_payload(self, data: dict):
         """Sets the payload of the refine box."""
-        if "hr_force" in data:
-            self.force_hires.setChecked(data["hr_force"])
-        if "hr_resize_mode" in data:
-            self.resize_mode.setCurrentText(data["hr_resize_mode"])
-        if "hr_steps" in data:
-            self.hires_steps.setValue(data["hr_steps"])
-        if "hr_scale" in data:
-            self.strength.setValue(data["hr_scale"])
-        if "denoising_strength" in data:
-            self.strength.setValue(data["denoising_strength"])
-        if "hr_upscaler" in data:
-            self.resize_method.setCurrentText(data["hr_upscaler"])
-        if "hr_second_pass_steps" in data:
-            self.hires_steps.setValue(data["hr_second_pass_steps"])
-        if "hr_resize_x" in data:
-            self.resize_width.setValue(data["hr_resize_x"])
-        if "hr_resize_y" in data:
-            self.resize_height.setValue(data["hr_resize_y"])
-        if "refine_start" in data:
-            self.refine_start.setValue(data["refine_start"])
-        if "refine_steps" in data:
-            self.refine_steps.setValue(data["refine_steps"])
-        if "refine_prompt" in data:
-            self.refine_prompt.setPlainText(data["refine_prompt"])
-        if "refine_negative" in data:
-            self.refine_negative_prompt.setPlainText(data["refine_negative"])
+        self.refine_start.setValue(data.get("refiner_start", self.refine_start.value()))
+        self.refine_steps.setValue(data.get("refiner_steps", self.refine_steps.value()))
+        self.refine_prompt.setPlainText(data.get("refiner_prompt", self.refine_prompt.toPlainText()))
+        self.refine_negative_prompt.setPlainText(data.get("refiner_negative", self.refine_negative_prompt.toPlainText()))
 
     def set_samplers(self, samplers: list[dict]):
         self.refine_samplers.clear()

@@ -12,6 +12,7 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QIcon
 from typing import Union
+from manager import info_view_manager
 
 
 
@@ -24,7 +25,7 @@ class CardBase(SimpleCardWidget):
         title: str = "",
         description: str = "",
         info_icon: Union[FluentIconBase, QIcon, str, None] = None,
-        show_info_on_focus: bool = False,
+        show_info_on_focus: bool = True,
         parent=None
     ):
         super().__init__(parent)
@@ -71,17 +72,22 @@ class CardBase(SimpleCardWidget):
     # ---------- Event Overrides ----------
 
     def enterEvent(self, event):
+        print('enter', self.show_info_on_focus)
         if self._hover_enabled:
             self.apply_style()
         if self.show_info_on_focus:
-            self.info_signal.emit(self.title, self.description, self.info_icon)
+            print('show')
+            info_view_manager.set_info(self.title, self.description, self.info_icon)
+            # self.info_signal.emit(self.title, self.description, self.info_icon)
         super().enterEvent(event)
 
     def leaveEvent(self, event):
         if self._hover_enabled and not self._is_focused:
             self.clear_style()
         if self.show_info_on_focus:
-            self.hide_signal.emit()
+            # self.hide_signal.emit()
+            print('hide')
+            info_view_manager.hide_info()
         super().leaveEvent(event)
 
     def focusInEvent(self, event):
@@ -340,7 +346,8 @@ if __name__ == "__main__":
     from PySide6.QtWidgets import QApplication, QWidget
     app = QApplication([])
     button = VerticalTitleCard("String bro")
-    window = DropDownCard(drop_down_widget=button, title="Drop Down Card")
+    info_view_manager.showInfo.connect(lambda title, description, icon: print(title, description, icon))
+    # window = DropDownCard(drop_down_widget=button, title="Drop Down Card")
     # window.toggled_hover_effect(False)
     # window.setFocusPolicy(Qt.FocusPolicy.NoFocus)
     # button = VerticalTitleCard("String bro", parent = window)
@@ -351,5 +358,5 @@ if __name__ == "__main__":
 
     # window.addWidget(button)
     # window.addWidget(button_2)
-    window.show()
+    button.show()
     app.exec()

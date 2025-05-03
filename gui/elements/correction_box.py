@@ -23,6 +23,7 @@ class CorrectionBox(GridFrame):
             0.0 - -1.0: Darken
             0.0 - 1.0: Brighten
             0.0: No change""",
+            show_info_on_focus=True,
             parent=self
         )
         self.brightness.set_range(-1, 1, 1)
@@ -34,6 +35,7 @@ class CorrectionBox(GridFrame):
             0.0 - -1.0: Blur
             0.0 - 1.0: Sharpen
             0.0: No change""",
+            show_info_on_focus=True,
             parent=self
         )
         self.sharpness.set_range(-1, 1, 1)
@@ -42,6 +44,7 @@ class CorrectionBox(GridFrame):
         self.color = DoubleSliderCard(
             "Color",
             description="""Adjust the overall color balance of the image:""",
+            show_info_on_focus=True,
             parent=self
         )
         self.color.set_range(0, 4, 1)
@@ -52,6 +55,7 @@ class CorrectionBox(GridFrame):
             description="""Prevent overexposure in HDR images:
             - Enabled: Limits exposure to prevent overexposure
             - Disabled: Allows overexposure in HDR images""",
+            show_info_on_focus=True,
             parent=self
         )
 
@@ -60,6 +64,7 @@ class CorrectionBox(GridFrame):
             description="""Set the exposure range for HDR images:
             0.0 - 1.0: Adjusts exposure to prevent overexposure
             0.0: No change""",
+            show_info_on_focus=True,
             parent=self
         )
         self.hdr_clamp_range.set_range(0, 10, 1)
@@ -70,6 +75,7 @@ class CorrectionBox(GridFrame):
             description="""Set the threshold for HDR clamping:
             0.0 - 1.0: Adjusts exposure to prevent overexposure
             0.0: No change""",
+            show_info_on_focus=True,
             parent=self
         )
         self.hdr_clamp_threshold.set_range(0, 1, 2)
@@ -80,6 +86,7 @@ class CorrectionBox(GridFrame):
             description="""Maximize dynamic range in HDR images:
             - Enabled: Increases dynamic range to maximize exposure
             - Disabled: Maintains current dynamic range""",
+            show_info_on_focus=True,
             parent=self
         )
 
@@ -88,6 +95,7 @@ class CorrectionBox(GridFrame):
             description="""Set the center point for HDR maximization:
             0.0 - 1.0: Adjusts dynamic range to maximize exposure
             0.0: No change""",
+            show_info_on_focus=True,
             parent=self
         )
         self.hdr_maximize_center.set_range(0, 2, 1)
@@ -98,6 +106,7 @@ class CorrectionBox(GridFrame):
             description="""Set the dynamic range for HDR maximization:
             0.0 - 1.0: Adjusts dynamic range to maximize exposure
             0.0: No change""",
+            show_info_on_focus=True,
             parent=self
         )
         self.hdr_max_range.set_range(0.5, 2, 1)
@@ -108,6 +117,7 @@ class CorrectionBox(GridFrame):
             description="""Adjust the color grading of the image:
             0.0 - 1.0: Adjusts color grading
             0.0: No change""",
+            show_info_on_focus=True,
             parent=self
         )
         self.color_grading.set_range(-1, 1)
@@ -152,30 +162,22 @@ class CorrectionBox(GridFrame):
 
     def set_payload(self, payload: dict):
         """Populates the UI from a dict."""
-        if "hdr_mode" in payload:
-            self.enable_hdr_clamp.setChecked(payload["hdr_mode"])
-        if "hdr_clamp" in payload:
-            self.enable_hdr_clamp.setChecked(payload["hdr_clamp"])  # Redundant but present in mapping
-        if "hdr_boundary" in payload:
-            self.hdr_clamp_range.setValue(payload["hdr_boundary"])
-        if "hdr_threshold" in payload:
-            self.hdr_clamp_threshold.setValue(payload["hdr_threshold"])
-        if "hdr_maximize" in payload:
-            self.enable_hdr_maximize.setChecked(payload["hdr_maximize"])
-        if "hdr_max_center" in payload:
-            self.hdr_maximize_center.setValue(payload["hdr_max_center"])
-        if "hdr_max_boundary" in payload:
-            self.hdr_max_range.setValue(payload["hdr_max_boundary"])
-        if "hdr_color" in payload:
-            self.color_grading.setValue(payload["hdr_color"])
-        if "hdr_brightness" in payload:
-            self.brightness.setValue(payload["hdr_brightness"])
-        if "hdr_sharpen" in payload:
-            self.sharpness.setValue(payload["hdr_sharpen"])
-        if "hdr_color_picker" in payload:
-            self.color_button.setColor(payload["hdr_color_picker"])
-        if "hdr_tint_ratio" in payload:
-            self.color.setValue(payload["hdr_tint_ratio"])
+        if not isinstance(payload, dict):
+            return
+
+        self.enable_hdr_clamp.setChecked(payload.get("hdr_mode", self.enable_hdr_clamp.isChecked()))
+        self.enable_hdr_clamp.setChecked(
+            payload.get("hdr_clamp", self.enable_hdr_clamp.isChecked()))  # Redundant but intentional
+        self.hdr_clamp_range.setValue(payload.get("hdr_boundary", self.hdr_clamp_range.value()))
+        self.hdr_clamp_threshold.setValue(payload.get("hdr_threshold", self.hdr_clamp_threshold.value()))
+        self.enable_hdr_maximize.setChecked(payload.get("hdr_maximize", self.enable_hdr_maximize.isChecked()))
+        self.hdr_maximize_center.setValue(payload.get("hdr_max_center", self.hdr_maximize_center.value()))
+        self.hdr_max_range.setValue(payload.get("hdr_max_boundary", self.hdr_max_range.value()))
+        self.color_grading.setValue(payload.get("hdr_color", self.color_grading.value()))
+        self.brightness.setValue(payload.get("hdr_brightness", self.brightness.value()))
+        self.sharpness.setValue(payload.get("hdr_sharpen", self.sharpness.value()))
+        self.color_button.setColor(payload.get("hdr_color_picker", self.color_button.color()))
+        self.color.setValue(payload.get("hdr_tint_ratio", self.color.value()))
 
 
 if __name__  == "__main__":

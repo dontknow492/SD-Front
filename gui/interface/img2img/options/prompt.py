@@ -24,6 +24,13 @@ class ImgPromptInterface(VerticalScrollWidget):
     def get_negative_prompt(self):
         return self.prompt_box.get_negative_prompt()
 
+    def get_payload(self):
+        payload = self.prompt_box.get_payload()
+        return payload
+
+    def set_payload(self, payload: dict):
+        self.prompt_box.set_payload(payload)
+
 
 if __name__ == "__main__":
     from PySide6.QtWidgets import QApplication, QWidget

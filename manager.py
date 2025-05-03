@@ -6,12 +6,36 @@ import re
 
 import numpy as np
 import pandas as pd
+from PySide6.QtGui import QIcon
 from loguru import logger
-from PySide6.QtCore import Signal, QObject, QSize
+from PySide6.QtCore import Signal, QObject, QSize, Slot
 from pathlib import Path
 from pandas import DataFrame
 from utils import scan_and_update_images
 import json
+
+
+class InfoNotificationManager(QObject):
+    showInfo = Signal(str, str, QIcon)
+    hideInfo = Signal()
+    def __init__(self, parent = None):
+        super().__init__(parent)
+        self._is_showing = False
+
+    @Slot()
+    def set_info(self, title: str, description: str, icon: QIcon):
+        if title == "" or not title:
+            return
+        self._is_showing = True
+        self.showInfo.emit(title, description, icon)
+
+    @Slot()
+    def hide_info(self):
+        if self._is_showing:
+            self.hideInfo.emit()
+        self._is_showing  = False
+
+
 
 class CoverCardManager(QObject):
     size_changed = Signal(QSize)
@@ -44,9 +68,6 @@ class CoverCardManager(QObject):
     # @property
     def get_border_radius(self) -> tuple[int, int , int, int]:
         return tuple(self.border_radius)
-
-
-
 
 
 class ImageManager(QObject):
@@ -405,16 +426,21 @@ class ImageManager(QObject):
         self.executor.shutdown(wait=True)
 
 
-with open("config.json", "r") as config_file:
-    config = json.load(config_file)
-
 scan_dirs = []
-card_manager = CoverCardManager()
-config.get('output_dirs')
-for key, value in config.get('output_dirs', {}).items():
-    scan_dirs.append(value)
+try:
+    with open("config.json", "r") as config_file:
+        config = json.load(config_file)
 
+        config.get('output_dirs')
+        for key, value in config.get('output_dirs', {}).items():
+            scan_dirs.append(value)
+except FileNotFoundError:
+    logger.error("Config file not found")
+
+
+card_manager = CoverCardManager()
 image_manager = ImageManager(scan_dirs)
+info_view_manager = InfoNotificationManager()
 # asyncio.run(image_manager.refresh())
 # print(image_manager.get_image_metadata(r"D:\AI Art\Images\Text2Img\00001-2025-04-06-hassakuXLIllustrious_v21fix.jpg"))
 

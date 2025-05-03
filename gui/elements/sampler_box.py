@@ -21,6 +21,7 @@ class SamplerBox(GridFrame):
             - DPM Adaptive: Auto-adjusts steps for consistent quality
             - Heun: Highest quality but 2x slower
             Tip: Start with DPM++ 2M Karras for most use cases""",
+            show_info_on_focus=True,
             parent=self
         )
 
@@ -32,6 +33,7 @@ class SamplerBox(GridFrame):
             30-50: High quality (recommended for final output)
             50+: Diminishing returns
             Note: More steps require exponentially more time""",
+            show_info_on_focus=True,
             parent=self
         )
         self.steps.set_range(10, 100)
@@ -46,6 +48,7 @@ class SamplerBox(GridFrame):
             - V-Explosion: Preserves mid-process details
             For photorealism: Karras
             For art: Exponential""",
+            show_info_on_focus=True,
             parent=self
         )
 
@@ -57,6 +60,7 @@ class SamplerBox(GridFrame):
             - Sqrt: More early-stage creativity
             - Cosine: Smooth transitions (good for faces)
             Stick with Linear unless you need specific effects""",
+            show_info_on_focus=True,
             parent=self
         )
 
@@ -68,6 +72,7 @@ class SamplerBox(GridFrame):
             - Trailing: More late refinement
             - Karras: Focused on critical phases
             Use Leading for conceptual work, Trailing for polishing""",
+            show_info_on_focus=True,
             parent=self
         )
 
@@ -79,6 +84,7 @@ class SamplerBox(GridFrame):
             - Sample: Good for high CFG scales
             - Original: Legacy mode
             EPS works for 90% of cases""",
+            show_info_on_focus=True,
             parent=self
         )
 
@@ -90,6 +96,7 @@ class SamplerBox(GridFrame):
             1.0: Default
             1.0-1.2: More aggressive (creative changes)
             Useful for fixing over/under processed areas""",
+            show_info_on_focus=True,
             parent=self
         )
         self.sigma_adjust.set_range(0, 2, 1)
@@ -102,6 +109,7 @@ class SamplerBox(GridFrame):
             0.3-0.6: Balanced approach
             0.6-1.0: Late-stage tweaks
             Lower values help with major composition changes""",
+            show_info_on_focus=True,
             parent=self
         )
         self.adjust_start.set_range(0, 1, 2)
@@ -114,6 +122,7 @@ class SamplerBox(GridFrame):
             0.3-0.7: Standard workflow
             0.7-1.0: Last-moment tweaks
             Higher values preserve early creativity""",
+            show_info_on_focus=True,
             parent=self
         )
         self.adjust_end.set_range(0, 1, 2)
@@ -129,6 +138,7 @@ class SamplerBox(GridFrame):
             4: Batched processing
             5: Optimized sequence
             Adjust to prioritize certain aspects""",
+            show_info_on_focus=True,
             parent=self
         )
         self.sampler_order.set_range(0, 5)
@@ -141,6 +151,7 @@ class SamplerBox(GridFrame):
             0.1-0.3: Subtle continuity (recommended)
             0.3-0.5: Strong frame blending
             Higher values reduce flickering but may cause motion blur""",
+            show_info_on_focus=True,
             parent=self
         )
         self.flow_shift.set_range(0, 10, 1)

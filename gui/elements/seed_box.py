@@ -8,16 +8,16 @@ class SeedBox(VerticalFrame):
         super().__init__(parent = parent)
         self.setContentsMargins(0, 0, 0, 0)
 
-        self.initial_seed = MySpinBox("Initial Seed",  description="Set the seed for the image generation", parent=self)
+        self.initial_seed = MySpinBox("Initial Seed",  description="Set the seed for the image generation", show_info_on_focus=True, parent=self)
         # self.initial Seed.spinBox().setRange(-1, 2**32 - 1)
         self.initial_seed.spinBox().setRange(-1, 2**31 - 10)
         self.initial_seed.spinBox().setValue(-1)
 
-        self.variation_seed = MySpinBox("Variation Seed", description="Set the seed for the image generation", parent=self)
+        self.variation_seed = MySpinBox("Variation Seed", description="Set the seed for the image generation", show_info_on_focus=True, parent=self)
         self.variation_seed.spinBox().setRange(-1, 2**31 - 1)
         self.variation_seed.spinBox().setValue(-1)
 
-        self.variation_strength = DoubleSliderCard("Variation Strength", description="Set the strength of the variation", parent=self)
+        self.variation_strength = DoubleSliderCard("Variation Strength", description="Set the strength of the variation", show_info_on_focus=True, parent=self)
         self.variation_strength.set_range(0, 1, 2)
         self.variation_strength.setValue(0)
 

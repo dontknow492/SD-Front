@@ -33,7 +33,6 @@ class ImageViewerBase:
             logger.exception(f"Error loading image: {e}")
 
     def wheelEvent(self, event):
-        print("asdf")
         """Handle mouse wheel events for zooming."""
         if self.current_pixmap is None:
             return

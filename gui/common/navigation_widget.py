@@ -14,11 +14,16 @@ class NaviAvatarWidget(NavigationWidget):
 
     def __init__(self, parent=None):
         super().__init__(isSelectable=False, parent=parent)
+        self._status = False
         self.avatar = QImage(r"D:\Program\SD Front\cover_demo.jpg").scaled(24, 24, Qt.KeepAspectRatio, Qt.SmoothTransformation)
         self.status_color = QColor(128, 128, 128)  # Default to offline
         self._text = "http://127.0.0.1:7860"
 
+    def get_status(self):
+        return self._status
+
     def set_status(self, online: bool):
+        self._status = online
         self.status_color = QColor(0, 200, 0) if online else QColor(128, 128, 128)
         self.update()
 

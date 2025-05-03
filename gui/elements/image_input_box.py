@@ -1,10 +1,57 @@
-from PySide6.QtCore import Qt, QPointF
+from PySide6.QtCore import Qt, QPointF, Signal
 from PySide6.QtGui import QPixmap, QColor, QPen
-from PySide6.QtWidgets import QButtonGroup, QGraphicsPixmapItem
-from qfluentwidgets import TogglePushButton, HorizontalSeparator, InfoBadge, InfoBadgePosition, StrongBodyLabel
-from gui.common import InputImageViewer, VerticalCard, VerticalFrame, HorizontalFrame, ThemedToolButton
+from PySide6.QtWidgets import QButtonGroup, QGraphicsPixmapItem, QGridLayout
+from qfluentwidgets import TogglePushButton, HorizontalSeparator, StrongBodyLabel, \
+    ToolButton, FluentIcon, ToggleToolButton, FlyoutViewBase, Slider, Flyout
+from gui.common import InputImageViewer, VerticalFrame, HorizontalFrame, ThemedToolButton
 
 from PySide6.QtGui import QPainter
+
+class SizeFlyout(FlyoutViewBase):
+    brushSizeChanged = Signal(int)
+    eraserSizeChanged = Signal(int)
+    def __init__(self, parent = None):
+        super().__init__(parent = parent)
+        self.setFixedWidth(300)
+        gridLayout = QGridLayout(self)
+
+        # Brush Size Controls
+        brushSizeLabel = StrongBodyLabel("Brush Size:", self)
+        brushSizeSlider = Slider(Qt.Orientation.Horizontal, self)
+        brushSizeSlider.setRange(1, 100)  # Adjust range as needed
+        brushSizeSlider.setValue(20)  # Default value
+        valueLabel = StrongBodyLabel(str(brushSizeSlider.value()), self)
+
+
+        # Eraser Size Controls
+        eraserSizeLabel = StrongBodyLabel("Eraser Size:", self)
+        eraserSizeSlider = Slider(Qt.Orientation.Horizontal, self)
+        eraserSizeSlider.setRange(1, 100)  # Adjust range as needed
+        eraserSizeSlider.setValue(20)  # Default value
+        eraserValueLabel = StrongBodyLabel(str(eraserSizeSlider.value()), self)
+
+
+        # Add to grid layout (row, column, rowSpan, columnSpan)
+        gridLayout.addWidget(brushSizeLabel, 0, 0)
+        gridLayout.addWidget(brushSizeSlider, 0, 1)
+        gridLayout.addWidget(valueLabel, 0, 2)
+        gridLayout.addWidget(eraserSizeLabel, 1, 0)
+        gridLayout.addWidget(eraserSizeSlider, 1, 1)
+        gridLayout.addWidget(eraserValueLabel, 1, 2)
+
+        # Set layout margins and spacing
+        gridLayout.setContentsMargins(10, 10, 10, 10)
+        gridLayout.setHorizontalSpacing(0)
+        gridLayout.setVerticalSpacing(10)
+        gridLayout.setColumnStretch(0, 0)  # Labels
+        gridLayout.setColumnStretch(1, 2)  # Sliders (2x wider)
+        gridLayout.setColumnStretch(2, 0)  # Values
+
+        # Connect signals (if needed)
+        brushSizeSlider.valueChanged.connect(self.brushSizeChanged)
+        brushSizeSlider.valueChanged.connect(lambda value: valueLabel.setText(str(value)))
+        eraserSizeSlider.valueChanged.connect(self.eraserSizeChanged)
+        eraserSizeSlider.valueChanged.connect(lambda value: eraserValueLabel.setText(str(value)))
 
 
 class InpaintImage(InputImageViewer):
@@ -20,6 +67,7 @@ class InpaintImage(InputImageViewer):
         self.last_point = QPointF()
 
         self.is_inpainting = False
+        self.is_inpainted = False
         self.allow_drawing = False
         self.is_scrolling = True
 
@@ -34,6 +82,42 @@ class InpaintImage(InputImageViewer):
         self._last_pos = None
 
         self.imageChanged.connect(self._on_image_changed)
+
+        # inpaint overlay
+        self.size_flyout = SizeFlyout()
+        self.size_flyout.brushSizeChanged.connect(lambda value: setattr(self, 'pen_width', value))
+        self.size_flyout.eraserSizeChanged.connect(lambda value: setattr(self, 'eraser_width', value))
+
+        self.inpaint_overlay = VerticalFrame(self)
+        self.brush_button = ToggleToolButton(FluentIcon.BRUSH)
+        self.brush_button.toggled.connect(lambda checked: setattr(self, 'drawing', checked))
+
+        self.eraser_button = ToggleToolButton(FluentIcon.ERASE_TOOL)
+        self.eraser_button.toggled.connect(lambda checked: setattr(self, 'erasing', checked))
+
+        self.move_button = ToggleToolButton(FluentIcon.MOVE)
+        self.move_button.toggled.connect(lambda checked: setattr(self, 'scrolling', checked))
+
+        self.clear_button = ThemedToolButton(FluentIcon.CLOSE)
+        self.clear_button.clicked.connect(self.clear_mask)
+
+        self.size_button = ToolButton(FluentIcon.FONT_SIZE)
+        self.size_button.clicked.connect(self._show_size_flyout)
+
+        self.inpaint_overlay.addWidgets([self.brush_button, self.eraser_button, self.clear_button, self.move_button, self.size_button])
+        # self.inpaint_overlay.resize(260, 40)
+        self.inpaint_overlay.adjustSize()
+
+        #group buttons
+        self.inpaint_button_group = QButtonGroup(self)  # Manages exclusive toggling
+        self.inpaint_button_group.setExclusive(True)  # Ensure only one is selected
+
+        # Add buttons to the group
+        self.inpaint_button_group.addButton(self.brush_button)
+        self.inpaint_button_group.addButton(self.eraser_button)
+        self.inpaint_button_group.addButton(self.move_button)
+
+        self.inpaint_overlay.setVisible(False)
 
     def _on_image_changed(self):
         self.image_mask = QPixmap(self.image_item.pixmap().size())
@@ -73,6 +157,7 @@ class InpaintImage(InputImageViewer):
 
     def drawLine(self, end_point):
         """Draw a line from last_point to end_point"""
+        self.is_inpainted = True
         painter = QPainter(self.image_mask)
         painter.setRenderHint(QPainter.Antialiasing)
 
@@ -110,9 +195,9 @@ class InpaintImage(InputImageViewer):
         """Set the eraser size"""
         self.eraser_width = width
 
-    def clear(self):
+    def clear_mask(self):
         """Clear the drawing area"""
-        self.image_mask.fill(Qt.white)
+        self.image_mask.fill(Qt.GlobalColor.transparent)
         self.image_mask_item.setPixmap(self.image_mask)
 
     def create_mask(self):
@@ -132,6 +217,7 @@ class InpaintImage(InputImageViewer):
     def drawing(self, value):
         self.is_drawing = value
         self.is_erasing = not value
+        self.is_scrolling = not value
 
     @property
     def erasing(self):
@@ -141,6 +227,7 @@ class InpaintImage(InputImageViewer):
     def erasing(self, value):
         self.is_erasing = value
         self.is_drawing = not value
+        self.is_scrolling = not value
 
     @property
     def inpainting(self):
@@ -149,6 +236,7 @@ class InpaintImage(InputImageViewer):
     @inpainting.setter
     def inpainting(self, value):
         self.is_inpainting = value
+        self.inpaint_overlay.setVisible(value)
 
     @property
     def scrolling(self):
@@ -157,7 +245,21 @@ class InpaintImage(InputImageViewer):
     @scrolling.setter
     def scrolling(self, value):
         self.is_scrolling = value
+        self.is_inpainting = not value
+        self.is_drawing = not value
+        self.is_erasing = not value
 
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.inpaint_overlay.move(self.width() - self.inpaint_overlay.width(), 0)
+        # self.inpaint_overlay.setFixedSize(self.size())
+
+    def _show_size_flyout(self):
+        Flyout.make(self.size_flyout, self.size_button, self, isDeleteOnClose=False)
+
+    @property
+    def inpainted(self):
+        return self.is_inpainted
 
     # def mousePressEvent(self, event, /):
 
@@ -165,7 +267,7 @@ class ImageInputBox(VerticalFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.image_label = StrongBodyLabel("Image")
-        self.image_viewer = InputImageViewer()
+        self.image_viewer = InpaintImage(self)
         self.image_viewer.setPixmapTransformationMode(Qt.TransformationMode.FastTransformation)
         self.mask_label = StrongBodyLabel("Mask")
         self.mask_label.setVisible(False)
@@ -179,6 +281,7 @@ class ImageInputBox(VerticalFrame):
         self.image_button = TogglePushButton("Image", self)
         self.image_button.setCheckable(True)
         self.image_inpaint_button = TogglePushButton("Inpaint", self)
+        self.image_inpaint_button.toggled.connect(lambda value: setattr(self.image_viewer, 'inpainting', value))
         self.mask_button = TogglePushButton("Mask", self)
         self.mask_button.toggled.connect(self.on_mask_clicked)
 
@@ -199,6 +302,7 @@ class ImageInputBox(VerticalFrame):
         self.addWidget(self.mask_label, alignment=Qt.AlignmentFlag.AlignHCenter)
         self.addWidget(self.mask_viewer, stretch=1)
 
+
     def on_mask_clicked(self, state: bool):
         if state:
             # self.image_viewer.set_drop(False)
@@ -211,18 +315,31 @@ class ImageInputBox(VerticalFrame):
             self.mask_viewer.hide()
             self.mask_label.hide()
 
+    def load_image(self, image_path):
+        self.image_viewer.load_image(image_path)
+        self.image_viewer.setPixmapTransformationMode(Qt.TransformationMode.SmoothTransformation)
+
+    def load_mask(self, image_path):
+        self.mask_viewer.load_image(image_path)
+        self.mask_viewer.setPixmapTransformationMode(Qt.TransformationMode.SmoothTransformation)
+
+    def set_pixmap(self, pixmap):
+        self.image_viewer.set_pixmap(pixmap)
+        self.image_viewer.setPixmapTransformationMode(Qt.TransformationMode.SmoothTransformation)
 
 
 if  __name__ == '__main__':
     from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QFrame
-    from gui.common.myFrame import VerticalFrame
+    from gui.common.myFrame import VerticalFrame, FlowFrame
+
     app = QApplication([])
-    # window = ImageInputBox()
-    window = InpaintImage()
+    window = ImageInputBox()
+    # window = InpaintImage()
     window.load_image(r"D:\Program\SD Front\cover_demo.jpg")
     # window.s
-    # window.inpainting = True
-    # window.drawing = True
+    window.inpainting = True
+    window.drawing = True
+    window.scrolling  = False
     window.resize(800, 600)
     window.show()
 

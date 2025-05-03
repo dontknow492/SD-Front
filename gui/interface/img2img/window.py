@@ -25,11 +25,22 @@ class ImgOptionWindow(SegmentedStackedWidget):
     def get_negative_prompt(self):
         return self.prompt_interface.get_negative_prompt()
 
+    def get_payload(self):
+        payload = self.base_interface.get_payload()
+        payload.update(self.prompt_interface.get_payload())
+        payload.update(self.advance_interface.get_payload())
+        return payload
+
+    def set_payload(self, payload: dict):
+        self.base_interface.set_payload(payload)
+        self.prompt_interface.set_payload(payload)
+        self.advance_interface.set_payload(payload)
+
 
 if __name__ == "__main__":
     import sys
     from PySide6.QtWidgets import QApplication
     app = QApplication(sys.argv)
-    window = ImgInterfaceOptionWindow()
+    window = ImgOptionWindow()
     window.show()
     sys.exit(app.exec())

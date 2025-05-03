@@ -20,7 +20,16 @@ class ImgAdvanceInterface(VerticalScrollWidget):
         self.addWidget(correction_label)
         self.addWidget(self.correction_box)
 
+    def get_payload(self):
+        payload = self.detailer_box.get_payload()
+        payload.update(self.correction_box.get_payload())
+        payload.update(self.advance_box.get_payload())
+        return payload
 
+    def set_payload(self, payload: dict):
+        self.detailer_box.set_payload(payload)
+        self.correction_box.set_payload(payload)
+        self.advance_box.set_payload(payload)
 
 
 if __name__ == "__main__":

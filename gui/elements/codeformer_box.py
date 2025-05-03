@@ -13,11 +13,13 @@ class CodeformerBox(GridFrame):
         self.strength = DoubleSliderCard(
             "Codeformer Strength",
             description="Strength of the codeformer",
+            show_info_on_focus=True,
             parent=self
         )
         self.weight = DoubleSliderCard(
             "Weight",
             description="Weight of the codeformer",
+            show_info_on_focus=True,
             parent=self
         )
 

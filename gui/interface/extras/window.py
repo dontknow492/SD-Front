@@ -24,11 +24,28 @@ class ExtraOptionWindow(VerticalScrollWidget):
         self.addWidget(remove_background_label)
         self.addWidget(self.remove_background_box)
 
+    def get_payload(self):
+        #todo: implement this
+        return {}
+    #     payload = self.upscale_box.get_payload()
+    #     payload.update(self.gfpgan_box.get_payload())
+    #     payload.update(self.codeformer_box.get_payload())
+    #     payload.update(self.remove_background_box.get_payload())
+    #     return payload
+
+    def set_payload(self, payload: dict):
+        #todo: implement this
+        pass
+    #     self.upscale_box.set_payload(payload)
+    #     self.gfpgan_box.set_payload(payload)
+    #     self.codeformer_box.set_payload(payload)
+    #     self.remove_background_box.set_payload(payload)
+
 
 if __name__ == "__main__":
     import sys
     from PySide6.QtWidgets import QApplication
     app = QApplication(sys.argv)
-    window = ExtraInterfaceOptionWindow()
+    window = ExtraOptionWindow()
     window.show()
     sys.exit(app.exec())

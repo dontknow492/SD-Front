@@ -14,31 +14,37 @@ class RemoveBackgroundBox(GridFrame):
         self.model = ComboBoxCard(
             "Model",
             description="Select the background removal model",
+            show_info_on_focus=True,
             parent=self
         )
         self.enable_post_process_mask =  CheckBoxCard(
             "Enable Post-Process Mask",
             description="Apply post-processing to the mask",
+            show_info_on_focus=True,
             parent=self
         )
         self.enable_alpha_matting = CheckBoxCard(
             "Enable Alpha Matting",
             description="Apply alpha matting to the mask",
+            show_info_on_focus=True,
             parent=self
         )
         self.erode_size = SliderCard(
             "Erode Size",
             description="Size of the erode operation",
+            show_info_on_focus=True,
             parent=self
         )
         self.foreground_threshold = SliderCard(
             "Foreground Threshold",
             description="Threshold for foreground",
+            show_info_on_focus=True,
             parent=self
         )
         self.background_threshold = SliderCard(
             "Background Threshold",
             description="Threshold for background",
+            show_info_on_focus=True,
             parent=self
         )
 

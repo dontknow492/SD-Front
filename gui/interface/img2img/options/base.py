@@ -29,6 +29,19 @@ class ImgBaseInterface(VerticalScrollWidget):
         self.addWidget(mask_label)
         self.addWidget(self.mask_box)
 
+    def get_payload(self):
+        payload = self.sampler_box.get_payload()
+        payload.update(self.seed_box.get_payload())
+        payload.update(self.denoise_box.get_payload())
+        payload.update(self.mask_box.get_payload())
+        return payload
+
+    def set_payload(self, payload: dict):
+        self.sampler_box.set_payload(payload)
+        self.seed_box.set_payload(payload)
+        self.denoise_box.set_payload(payload)
+        self.mask_box.set_payload(payload)
+
 if  __name__ == "__main__":
     from PySide6.QtWidgets import QApplication, QWidget
     app = QApplication([])
