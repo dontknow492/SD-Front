@@ -36,7 +36,6 @@ class InfoNotificationManager(QObject):
         self._is_showing  = False
 
 
-
 class CoverCardManager(QObject):
     size_changed = Signal(QSize)
     border_radius_changed = Signal(int, int, int, int)
@@ -427,21 +426,8 @@ class ImageManager(QObject):
 
 
 scan_dirs = []
-try:
-    with open("config.json", "r") as config_file:
-        config = json.load(config_file)
-
-        config.get('output_dirs')
-        for key, value in config.get('output_dirs', {}).items():
-            scan_dirs.append(value)
-except FileNotFoundError:
-    logger.error("Config file not found")
 
 
 card_manager = CoverCardManager()
 image_manager = ImageManager(scan_dirs)
 info_view_manager = InfoNotificationManager()
-# asyncio.run(image_manager.refresh())
-# print(image_manager.get_image_metadata(r"D:\AI Art\Images\Text2Img\00001-2025-04-06-hassakuXLIllustrious_v21fix.jpg"))
-
-# image_manager.backup()S

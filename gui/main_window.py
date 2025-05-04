@@ -1,15 +1,14 @@
 from typing import Callable, Optional
-
 from PySide6.QtCore import Qt, QUrl
-from PySide6.QtGui import QDesktopServices, QPixmap
+from PySide6.QtGui import QDesktopServices, QPixmap, QColor
 from PySide6.QtWidgets import QHBoxLayout, QFrame
 from qfluentwidgets import FluentWindow, SubtitleLabel, setFont, FluentIcon, NavigationItemPosition, \
     PopUpAniStackedWidget, \
     NavigationPushButton, MessageBox
-from config import GenerationTypeFlags
+from config import GenerationTypeFlags, sd_config
 from gui.common import HoverSplitter
 from gui.interface import GalleryInterface
-from gui.interface import TxtOptionWindow, ExtraOptionWindow, ControlOptionWindow, ImgOptionWindow
+from gui.interface import TxtOptionWindow, ExtraOptionWindow, ControlOptionWindow, ImgOptionWindow, SettingsInterface
 from loguru import logger
 from api import sd_api_manager
 from manager import info_view_manager
@@ -18,23 +17,11 @@ from gui.elements import OutputImageBox, ImageInputBox
 from gui.common import NaviAvatarWidget
 from gui.components import NotificationWidget
 
-class Widget(QFrame):
-
-    def __init__(self, text: str, parent=None):
-        super().__init__(parent=parent)
-        self.label = SubtitleLabel(text, self)
-        self.hBoxLayout = QHBoxLayout(self)
-
-        setFont(self.label, 24)
-        self.label.setAlignment(Qt.AlignCenter)
-        self.hBoxLayout.addWidget(self.label, 1, Qt.AlignCenter)
-
-        # Must set a globally unique object name for the sub-interface
-        self.setObjectName(text.replace(' ', '-'))
-
 class SDFront(FluentWindow):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+
 
         self._current_image_data = dict()
         self.setWindowTitle("SD Front")
@@ -63,8 +50,8 @@ class SDFront(FluentWindow):
 
         self.gallery_interface = GalleryInterface(self)
         self.gallery_interface.setObjectName("Gallery Interface")
-        self.settings_interface = Widget("Settings Interface", self)
-
+        self.settings_interface = SettingsInterface(self)
+        self.settings_interface.setObjectName("Settings Interface")
         #notification
         self.notification_widget = NotificationWidget(self)
         self.notification_widget.setTitle("Notification")
@@ -77,7 +64,7 @@ class SDFront(FluentWindow):
         self._init_navigation()
         self._signal_listener()
         sd_api_manager.get_samplers()
-        sd_api_manager.check_server_status()
+        # sd_api_manager.check_server_status()
 #
     def _init_ui(self):
         self.option_stack.addWidget(self.text2image_interface)
@@ -166,14 +153,29 @@ class SDFront(FluentWindow):
             self._current_image_gen = GenerationTypeFlags.EXTRAS
 
     def on_generation_progress(self, progress: dict):
-        self.outputImageView.on_progress(progress)
+        live_preview = sd_config.showLivePreview.value
+        self.outputImageView.on_progress(progress, live_preview)
 
     def on_generation_finished(self, image_data: dict):
         # self._previous_gen_data = self._current_image_data
         self._current_image_data = image_data
         self.outputImageView.on_finished(image_data)
         #todo: make it dynamic(based on config).
-        if save_sdwebui_image_with_info(image_data, f"outputs/{self._current_image_gen.value()}"):
+        match self._current_image_gen:
+            case GenerationTypeFlags.TEXT2IMAGE:
+                output_dir = sd_config.txt2imgDir.valu
+            case GenerationTypeFlags.IMAGE2IMAGE:
+                output_dir = sd_config.img2imgDir.value
+            case GenerationTypeFlags.CONTROLS:
+                output_dir = sd_config.controlsDir.value
+            case GenerationTypeFlags.EXTRAS:
+                output_dir = sd_config.extrasDir.value
+            case _:
+                output_dir = None
+                logger.error("Unknown generation type")
+
+        if save_sdwebui_image_with_info(image_data, output_dir, save_txt=sd_config.saveGenInfoToTxt.value,
+                                        image_format=sd_config.defaultImageFormat.value):
             logger.info("Image saved successfully")
         else:
             logger.error("Failed to save image")
@@ -192,14 +194,18 @@ class SDFront(FluentWindow):
         if to == GenerationTypeFlags.TEXT2IMAGE:
             payload = self._current_image_data.get('parameters')
             self.text2image_interface.set_payload(payload)
+            self.option_switch(self.text2image_interface)
         if to == GenerationTypeFlags.IMAGE2IMAGE:
             payload = self._current_image_data.get('parameters')
             self.image2image_interface.set_payload(payload)
+            self.option_switch(self.image2image_interface)
         if to == GenerationTypeFlags.CONTROLS:
             payload = self._current_image_data.get('parameters')
             self.controls_interface.set_payload(payload)
+            self.option_switch(self.controls_interface)
         if to == GenerationTypeFlags.EXTRAS:
             payload = self._current_image_data.get('parameters')
+            self.option_switch(self.extras_interface)
 
             # self.extras_interface.set_payload(payload)
         self.inputImageView.set_pixmap(pixmap)

@@ -129,15 +129,16 @@ class OutputImageBox(VerticalFrame):
             self.generate_button.setText("Generate")
             self.generate_button.setIcon(FluentIcon.PLAY_SOLID)
 
-    def on_progress(self, progress: dict):
+    def on_progress(self, progress: dict, show_live_progress: bool = True):
         self.extra_option_container.setEnabled(False)
         image = progress["current_image"]
-        if image is None:
-            logger.debug("No Progress Image Generated")
-            if not self.view.current_pixmap:
-                self.view.set_pixmap(Placeholder.NOISE.pixmap())
-            return
-        self.view.display_base64_image(image)
+        if show_live_progress:
+            if image is None:
+                logger.debug("No Progress Image Generated")
+                if not self.view.current_pixmap:
+                    self.view.set_pixmap(Placeholder.NOISE.pixmap())
+                return
+            self.view.display_base64_image(image)
         self.progress_widget.set_progress(progress)
         self.progress_widget.setVisible(True)
         logger.debug(f"updating progress image: {image[:100]}")

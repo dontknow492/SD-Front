@@ -4,7 +4,7 @@ from PySide6.QtWidgets import QWidget, QLabel, QHBoxLayout, QVBoxLayout, QFrame
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtCore import Qt
 from qfluentwidgets import SubtitleLabel, StrongBodyLabel, IconWidget, FluentIconBase, \
-    TransparentToolButton, FluentIcon, themeColor
+    TransparentToolButton, FluentIcon, themeColor, qconfig
 
 from PySide6.QtWidgets import (
     QWidget, QLabel, QVBoxLayout, QHBoxLayout, QGraphicsDropShadowEffect
@@ -12,6 +12,9 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QIcon, QColor
 from PySide6.QtCore import Qt
 from typing import Union
+from config import sd_config
+
+from qframelesswindow import FramelessDialog, FramelessWindow
 
 class NotificationWidget(QWidget):
     def __init__(self, parent=None):
@@ -28,9 +31,6 @@ class NotificationWidget(QWidget):
 
         # Drop shadow
         shadow = QGraphicsDropShadowEffect(self)
-        shadow.setBlurRadius(20)
-        shadow.setOffset(0, 5)
-        shadow.setColor(QColor(0, 0, 0, 120))
         self.setGraphicsEffect(shadow)
 
         # Layouts
@@ -47,22 +47,29 @@ class NotificationWidget(QWidget):
         self.description_label = StrongBodyLabel(self)
         self.description_label.setWordWrap(True)
 
-        self.close_button = TransparentToolButton(FluentIcon.CLOSE, self)
-        self.close_button.clicked.connect(self.close)
+        # self.close_button = TransparentToolButton(FluentIcon.CLOSE, self)
+        # self.close_button.clicked.connect(self.close)
 
         # Add widgets to layouts
         title_layout.addWidget(self.icon_widget)
         title_layout.addWidget(self.title_label, 1, alignment=Qt.AlignmentFlag.AlignVCenter)
-        title_layout.addWidget(self.close_button)
+        # title_layout.addWidget(self.close_button)
 
         main_layout.addLayout(title_layout)
         main_layout.addWidget(self.description_label)
 
         # Style
+        sd_config.themeColorChanged.connect(self._update_style_sheet)
+        sd_config.themeChanged.connect(self._update_style_sheet)
+
+        self._update_style_sheet()
+
+    def _update_style_sheet(self):
+        print("theme name", themeColor().name())
         self.setStyleSheet(f"""
             #NotificationWidget {{
                 background-color: {themeColor().name()};
-                border-radius: 10px;
+                border-radius: 20px;
             }}
         """)
 
@@ -89,5 +96,4 @@ if __name__ == "__main__":
     widget.setIcon(QIcon("path/to/icon.png"))
     widget.setTitle("Notification Title")
     widget.setDescription("This is a notification description.")
-    widget.show()
-    app.exec()
+    widget.exec()

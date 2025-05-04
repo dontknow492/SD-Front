@@ -2,6 +2,8 @@ from typing import Dict, Any
 from PySide6.QtCore import Signal, QObject, Slot, Qt
 from loguru import logger
 
+from config import sd_config
+
 from api.generator import ImageGenerator
 from api.fetcher import ProgressTracker, BaseFetcher
 
@@ -44,7 +46,7 @@ class StableDiffusionAPI(QObject):
         super().__init__(parent)
 
         self.base_url = base_url
-        self.cache_limit = 100 * 1024 * 1024
+        self.cache_limit = sd_config.netCacheSize.value
         self.auth_token = None
         self.image_generator = ImageGenerator(base_url, self)
         self.info_fetcher = BaseFetcher(base_url, self.auth_token, self.cache_limit, self)
@@ -229,7 +231,10 @@ class StableDiffusionAPI(QObject):
 
     def gen_started(self):
         self.active_generation = True
-        self.progress_tracker.start_monitoring()
+        # only checking if user enable live preview
+        # if sd_config.showLivePreview.value:
+            # start monitoring, setting monitor interval based on sd_config
+        self.progress_tracker.start_monitoring(sd_config.livePreviewDelayMs.value)
 
     @property
     def gen_status(self):
@@ -246,8 +251,8 @@ class StableDiffusionAPI(QObject):
         self.info_fetcher.cancel()
         self.progress_tracker.stop_monitoring()
 
-
-sd_api_manager = StableDiffusionAPI()
+base_url = sd_config.apiUrl.value
+sd_api_manager = StableDiffusionAPI(base_url)
 
 if __name__ ==  "__main__":
     from PySide6.QtWidgets import QApplication

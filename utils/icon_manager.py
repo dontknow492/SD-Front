@@ -33,6 +33,11 @@ class IconManager(FluentIconBase, Enum):
     TEXT_SIZE = "text-size"
     UP_ARROW = "up-arrow"
     ASPECT_RATIO = "ar-zone"
+    DATA = "data"
+    TEMP_FOLDER = "temp-opened"
+    SLIDER = "slider-01"
+    CLOCK = "clock-three"
+    LIVE = "live"
 
     def path(self, theme=Theme.AUTO):
         # getIconColor() return "white" or "black" according to current theme

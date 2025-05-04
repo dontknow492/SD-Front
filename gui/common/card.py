@@ -2,8 +2,8 @@ from typing import override, overload, Union
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QIcon, QColor
-from qfluentwidgets import SimpleCardWidget, qconfig, themeColor, toggleTheme, FlowLayout, StrongBodyLabel, \
-    FluentIconBase, qconfig, ComboBox
+from qfluentwidgets import SimpleCardWidget,  themeColor, toggleTheme, FlowLayout, StrongBodyLabel, \
+    FluentIconBase,  ComboBox
 
 from PySide6.QtWidgets import QVBoxLayout, QWidget, QHBoxLayout, QFrame
 
@@ -13,6 +13,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QIcon
 from typing import Union
 from manager import info_view_manager
+from config import sd_config
 
 
 
@@ -44,8 +45,8 @@ class CardBase(SimpleCardWidget):
         self.main_layout = self.init_layout()
         self.setLayout(self.main_layout)
 
-        qconfig.themeChanged.connect(self._on_theme_changed)
-        qconfig.themeColorChanged.connect(self._on_theme_changed)
+        sd_config.themeChanged.connect(self._on_theme_changed)
+        sd_config.themeColorChanged.connect(self._on_theme_changed)
 
         self.setStyleSheet(self.get_default_stylesheet())
 

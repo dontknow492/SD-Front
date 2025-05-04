@@ -16,3 +16,4 @@ from .collapsible import CollapsibleBase
 from .spinner import WaitingSpinner
 from .loading_overlay import LoadingOverlay
 from .navigation_widget import NaviAvatarWidget
+from .setting_card import LineEditSettingCard, FolderSettingCard,  SizeSettingCard,  SpinBoxSettingCard
