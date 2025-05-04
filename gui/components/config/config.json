@@ -1,0 +1,48 @@
+{
+    "MainWindow": {
+        "AccentColor": "#ff009faa",
+        "EnableAcrylic": false,
+        "ThemeMode": "Dark"
+    },
+    "API": {
+        "Url": "http://127.0.0.1:7860",
+        "DefaultSteps": 20
+    },
+    "Cache": {
+        "CacheDir": ".cache",
+        "NetworkCacheSize": 104857600,
+        "ThumbnailCacheSize": 104857600
+    },
+    "Output": {
+        "ControlsDir": "outputs/controls",
+        "DefaultImageFormat": "jpg",
+        "ExtrasDir": "outputs/extras",
+        "Img2ImgDir": "outputs/img2img",
+        "Txt2ImgDir": "outputs/txt2img"
+    },
+    "Data": {
+        "DataDir": "data"
+    },
+    "Update": {
+        "EnableAutoUpdate": true,
+        "RepoUrl": "https://github.com/dontknow492/SD-Front"
+    },
+    "Save": {
+        "EnableAutosave": true,
+        "SaveGenInfoToTxt": true
+    },
+    "Preview": {
+        "LivePreviewDelayMs": 500,
+        "ShowLivePreview": true
+    },
+    "Gallery": {
+        "PreLoadImages": 50
+    },
+    "Startup": {
+        "StartupPage": "txt2img"
+    },
+    "QFluentWidgets": {
+        "ThemeColor": "#ff009faa",
+        "ThemeMode": "Light"
+    }
+}
