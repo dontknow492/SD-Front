@@ -43,6 +43,7 @@ def main():
     main_window.showMaximized()
     logger.info("SDFront shown")
 
+    sd_api_manager.get_samplers()
     sd_api_manager.check_server_status()
 
     with event_loop:

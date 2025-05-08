@@ -1,11 +1,11 @@
 from typing import Dict, Any
-from PySide6.QtCore import Signal, QObject, Slot, Qt
+from PySide6.QtCore import Signal, QObject, Slot, Qt, QTimer
 from loguru import logger
 
 from config import sd_config
 
 from api.generator import ImageGenerator
-from api.fetcher import ProgressTracker, BaseFetcher
+from api.fetcher import ProgressTracker, BaseFetcher, StatusTracker
 
 
 class StableDiffusionAPI(QObject):
@@ -49,8 +49,10 @@ class StableDiffusionAPI(QObject):
         self.cache_limit = sd_config.netCacheSize.value
         self.auth_token = None
         self.image_generator = ImageGenerator(base_url, self)
-        self.info_fetcher = BaseFetcher(base_url, self.auth_token, self.cache_limit, self)
-        self.progress_tracker = ProgressTracker(self.info_fetcher)
+        self.info_fetcher = BaseFetcher(base_url, self.auth_token, cache_size=self.cache_limit, parent = self)
+        self.tracker_fetcher = BaseFetcher(base_url, self.auth_token, cache_size=self.cache_limit, parent = self)
+        self.progress_tracker = ProgressTracker(self.tracker_fetcher)
+        self.status_tracker = StatusTracker(self.tracker_fetcher)
         self.active_generation = False
 
         self._signal_mapping()
@@ -64,6 +66,8 @@ class StableDiffusionAPI(QObject):
         self.image_generator.generation_started.connect(self.gen_started)
         #progress
         self.progress_tracker.progressData.connect(self.image_progress_updated.emit)
+        #tracker
+        self.status_tracker.statusData.connect(self.server_status_changed.emit)
         #fetcher
         self.info_fetcher.dataFetched.connect(self._handle_response)
         self.info_fetcher.fetchFailed.connect(self._handle_error)
@@ -234,7 +238,8 @@ class StableDiffusionAPI(QObject):
         # only checking if user enable live preview
         # if sd_config.showLivePreview.value:
             # start monitoring, setting monitor interval based on sd_config
-        self.progress_tracker.start_monitoring(sd_config.livePreviewDelayMs.value)
+        QTimer.singleShot(1000, lambda : self.progress_tracker.start_monitoring(sd_config.livePreviewDelayMs.value))
+
 
     @property
     def gen_status(self):
@@ -262,9 +267,10 @@ if __name__ ==  "__main__":
         "steps": 10,
         "width": 512,
         "height": 512,
+        "seed": 523412312,
     }
     # sd_api_manager.generate_txt_image(payload)
-    sd_api_manager.image_progress_updated.connect(lambda data: print(data.keys()))
+    sd_api_manager.image_progress_updated.connect(lambda data: print(data))
     sd_api_manager.style_fetched.connect(lambda data: print(len(data)))
-    sd_api_manager.get_styles()
+    sd_api_manager.generate_txt_image(payload)
     app.exec()

@@ -9,3 +9,4 @@ from .key_value_widget import KeyValueWidget
 from .progress_widget import ProgressWidget
 from .tag_widget import TagWidget
 from .notification_widget import NotificationWidget
+from .dialog_window import BackupOptionsDialog

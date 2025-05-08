@@ -121,7 +121,7 @@ class FilterBar(VerticalFrame):
         container.setLayoutMargins(0, 0, 0, 0)
 
         self._sort_order = 1
-        self._sort_type = 'creation date'
+        self._sort_type = 'date'
 
         title = title if title else "Filter"
         self.title_label = SubtitleLabel(title, container)
@@ -415,7 +415,7 @@ class ImageDialog(QDialog):
 
 
 class GalleryTab(VerticalFrame):
-    def __init__(self, dir_path: str, icon: Union[FluentIconBase, QIcon, str, None] = None, parent = None):
+    def __init__(self, dir_path: str, icon: Union[FluentIconBase, QIcon, str, None] = None, parent = None, pre_load: int = 50):
         super().__init__(parent)
         self.setLayoutMargins(9, 0, 0, 0)
         self._prev_hash = None
@@ -439,7 +439,7 @@ class GalleryTab(VerticalFrame):
         self.addWidget(self.option_container)
         self.addWidget(self.display_container, stretch=1)
 
-        self._batch_total = 12
+        self._batch_total = 50
         self._batch_size = 10  # Load 10 images at a time
         self._current_batch_start = len(self.card_lookup) + self._batch_total
         self._current_batch_max_index = min(len(self.tab_dataframe), self._current_batch_start + self._batch_total)

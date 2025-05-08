@@ -205,30 +205,24 @@ class SamplerBox(GridFrame):
         }
 
     def set_payload(self, data: dict):
-        if "sampler_name" in data:
-            self.samplers.setCurrentText(data["sampler_name"])
-        if "steps" in data:
-            self.steps.setValue(data["steps"])
-        if "sigma_schedule" in data:
-            self.sigma_method.setCurrentText(data["sigma_schedule"])
-        if "beta_schedule" in data:
-            self.beta_schedule.setCurrentText(data["beta_schedule"])
-        if "timestep_spacing" in data:
-            self.timestep_spacing.setCurrentText(data["timestep_spacing"])
-        if "prediction_type" in data:
-            self.prediction_method.setCurrentText(data["prediction_type"])
-        if "sampler_order" in data:
-            self.sampler_order.setValue(data["sampler_order"])
-        if "pag_scale" in data:
-            self.sigma_adjust.setValue(data["pag_scale"])
-        if "pag_adaptive" in data:
-            pag_adaptive = data["pag_adaptive"]
-            if "start" in pag_adaptive:
-                self.adjust_start.setValue(pag_adaptive["start"])
-            if "end" in pag_adaptive:
-                self.adjust_end.setValue(pag_adaptive["end"])
-        if "flow_shift" in data:
-            self.flow_shift.setValue(data["flow_shift"])
+        """Populates the UI from a dict."""
+        if not isinstance(data, dict):
+            return
+
+        self.samplers.setCurrentText(data.get("sampler_name", self.samplers.currentText()))
+        self.steps.setValue(data.get("steps", self.steps.value()))
+        self.sigma_method.setCurrentText(data.get("sigma_schedule", self.sigma_method.currentText()))
+        self.beta_schedule.setCurrentText(data.get("beta_schedule", self.beta_schedule.currentText()))
+        self.timestep_spacing.setCurrentText(data.get("timestep_spacing", self.timestep_spacing.currentText()))
+        self.prediction_method.setCurrentText(data.get("prediction_type", self.prediction_method.currentText()))
+        self.sampler_order.setValue(data.get("sampler_order", self.sampler_order.value()))
+        self.sigma_adjust.setValue(data.get("pag_scale", self.sigma_adjust.value()))
+        self.flow_shift.setValue(data.get("flow_shift", self.flow_shift.value()))
+
+        pag_adaptive = data.get("pag_adaptive", {})
+        if isinstance(pag_adaptive, dict):
+            self.adjust_start.setValue(pag_adaptive.get("start", self.adjust_start.value()))
+            self.adjust_end.setValue(pag_adaptive.get("end", self.adjust_end.value()))
 
     def set_samplers(self, samplers: list[dict]):
         self.samplers.clear()

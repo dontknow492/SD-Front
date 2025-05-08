@@ -1,6 +1,7 @@
 from gui.common import GridFrame, ThemedToolButton
 from gui.components import CheckBoxCard, ComboBoxCard, SliderCard, TextEditCard, DoubleSliderCard
 from api import sd_api_manager
+from gui.elements.resize_box import ResizeBox
 from qfluentwidgets import TogglePushButton
 
 class RefineBox(GridFrame):
@@ -180,6 +181,8 @@ class RefineBox(GridFrame):
             parent=self
         )
 
+        self.resize_box = ResizeBox(self)
+
         widgets = [
             self.enable_refine_pass,
             self.force_hires,
@@ -193,7 +196,8 @@ class RefineBox(GridFrame):
             self.refine_start,
             self.refine_steps,
             self.refine_prompt,
-            self.refine_negative_prompt
+            self.refine_negative_prompt,
+            self.resize_box
         ]
         self.addWidget(self.enable_refine_pass)
         self.addWidget(self.force_hires)
@@ -208,6 +212,7 @@ class RefineBox(GridFrame):
         self.addWidget(self.refine_steps)
         self.addFullWidthWidget(self.refine_prompt)
         self.addFullWidthWidget(self.refine_negative_prompt)
+        self.addFullWidthWidget(self.resize_box)
 
         sd_api_manager.sampler_fetched.connect(self.set_samplers)
 
@@ -216,8 +221,14 @@ class RefineBox(GridFrame):
         if not self.enable_refine_pass.isChecked():
             return {}
         return {
-
             # "hr_sampler_name": self.refine_samplers.currentText(),
+            "hr_force": self.force_hires.isChecked(),
+            "hr_second_pass_steps": self.hires_steps.value(),
+            "hr_sampler_name": self.refine_samplers.currentText(),
+            "hr_resize_x": self.resize_box.getWidth(),
+            "hr_resize_y": self.resize_box.getHeight(),
+            "hr_resize_mode": self.resize_mode.currentText(),
+            "hr_upscaler": self.resize_method.currentText(),
             "refiner_start": self.refine_start.value(),
             "refiner_steps": self.refine_steps.value(),
             "refiner_prompt": self.refine_prompt.toPlainText(),

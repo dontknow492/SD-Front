@@ -305,7 +305,6 @@ class ImageInputBox(VerticalFrame):
 
     def on_mask_clicked(self, state: bool):
         if state:
-            # self.image_viewer.set_drop(False)
             self.mask_viewer.setAcceptDrops(True)
             self.mask_viewer.show()
             self.mask_label.show()
@@ -323,9 +322,15 @@ class ImageInputBox(VerticalFrame):
         self.mask_viewer.load_image(image_path)
         self.mask_viewer.setPixmapTransformationMode(Qt.TransformationMode.SmoothTransformation)
 
+    def get_mask_pixmap(self):
+        return self.mask_viewer.get_image()
+
     def set_pixmap(self, pixmap):
         self.image_viewer.set_pixmap(pixmap)
         self.image_viewer.setPixmapTransformationMode(Qt.TransformationMode.SmoothTransformation)
+
+    def get_pixmap(self):
+        return self.image_viewer.get_image()
 
 
 if  __name__ == '__main__':

@@ -21,6 +21,7 @@ class BaseFetcher(QObject):
     _ENDPOINT_OPTIONS = "/sdapi/v1/options"
     _ENDPOINT_UPSCALERS = "/sdapi/v1/upscalers"
     _ENDPOINT_SAMPLERS = "/sdapi/v1/samplers"
+    _ENDPOINT_STATUS = "/sdapi/v1/status"
 
     # Signals
     dataFetched = Signal(object, str)  # data, request_uuid
@@ -31,11 +32,12 @@ class BaseFetcher(QObject):
     authenticationRequired = Signal()  # Emitted on 401/403 errors
 
     def __init__(self, base_url: str = "http://127.0.0.1:7860",
-                 auth_token: Optional[str] = None, cache_ttl_seconds: int = 3600, parent=None):
+                 auth_token: Optional[str] = None, cache_ttl_seconds: int = 3600, cache_size: int = 104857600, parent=None):
         super().__init__(parent)
         self.base_url = base_url.rstrip('/')
         self.auth_token = auth_token
         self.cache_ttl_seconds = cache_ttl_seconds
+        self.cache_size = cache_size
 
         self.manager = QNetworkAccessManager(self)
         self._setup_cache()
@@ -53,7 +55,7 @@ class BaseFetcher(QObject):
         """Initialize and configure the disk cache"""
         self.cache = QNetworkDiskCache(self)
         self.cache.setCacheDirectory(".cache")
-        self.cache.setMaximumCacheSize(50 * 1024 * 1024)  # 50MB
+        self.cache.setMaximumCacheSize(self.cache_size)
         self.manager.setCache(self.cache)
 
     def clear_cache(self):
@@ -133,9 +135,10 @@ class BaseFetcher(QObject):
         # Configure caching
         cache_control = QNetworkRequest.CacheLoadControl.AlwaysNetwork
         if use_cache:
-            cache_control = QNetworkRequest.CacheLoadControl.PreferCache
+            cache_control = QNetworkRequest.CacheLoadControl.AlwaysCache
             # Force revalidation if cached entry is expired
             if self._is_cached_entry_expired(url):
+                logger.debug("Cache is Expired so renewing it..")
                 cache_control = QNetworkRequest.CacheLoadControl.AlwaysNetwork
 
         request.setAttribute(QNetworkRequest.Attribute.CacheLoadControlAttribute, cache_control)
@@ -169,6 +172,7 @@ class BaseFetcher(QObject):
 
     def _is_cached_entry_expired(self, url: QUrl) -> bool:
         """Check if a cached entry exists and is expired"""
+        logger.debug("Checking if cache entry is expired")
         meta_data = self.cache.metaData(url)
         if not meta_data.isValid():
             return False
@@ -248,27 +252,10 @@ class BaseFetcher(QObject):
 
         # Handle errors (including network errors and server errors)
         if reply.error() != QNetworkReply.NoError or status_code >= 500:
-            error_code = reply.error()
             error_msg = self._get_error_message(reply, status_code)
             metadata = self._request_metadata.get(request_uuid, {})
 
-            if error_code == QNetworkReply.ConnectionRefusedError:
-                error_msg = "Connection refused by the server"
-                self.serverAvailable.emit(False)
-            elif error_code == QNetworkReply.HostNotFoundError:
-                error_msg = "Server not found (check your base URL)"
-                self.serverAvailable.emit(False)
-            elif error_code == QNetworkReply.TimeoutError:
-                error_msg = "Request timed out (server may be down or unreachable)"
-                self.serverAvailable.emit(False)
-            elif error_code == QNetworkReply.ContentNotFoundError:
-                error_msg = "Requested resource not found on server (404)"
-            elif error_code == QNetworkReply.ContentAccessDenied:
-                error_msg = "Access denied to the resource (403)"
-            elif error_code == QNetworkReply.InternalServerError:
-                error_msg = "Internal server error (500)"
-            elif error_code != QNetworkReply.NoError:
-                error_msg = f"Network error {error_code}: {reply.errorString()}"
+            self._handle_error(reply, request_uuid)
 
             # Attempt retry if configured
             if metadata.get("retries_left", 0) > 0:
@@ -297,6 +284,53 @@ class BaseFetcher(QObject):
         finally:
             self._cleanup_request(request_uuid)
             reply.deleteLater()
+
+    def _handle_error(self, reply: QNetworkReply):
+        """Classify and handle network-related errors from QNetworkReply."""
+        status_code = reply.attribute(QNetworkRequest.HttpStatusCodeAttribute) or 0
+        error_string = reply.errorString()
+
+        error = reply.error()
+        server_down = False
+
+        match error:
+            case QNetworkReply.NetworkError.ConnectionRefusedError:
+                message = "Connection refused by the server. Is the server running?"
+                server_down = True
+            case QNetworkReply.NetworkError.RemoteHostClosedError:
+                message = "Server closed the connection unexpectedly."
+            case QNetworkReply.NetworkError.HostNotFoundError:
+                message = "Host not found. Check your server address or network."
+                server_down = True
+            case QNetworkReply.NetworkError.TimeoutError:
+                message = "Request timed out. Server might be overloaded or unreachable."
+            case QNetworkReply.NetworkError.OperationCanceledError:
+                message = "The request was cancelled before completion."
+            case QNetworkReply.NetworkError.SslHandshakeFailedError:
+                message = "SSL handshake failed. Check SSL configuration or certificates."
+            case QNetworkReply.NetworkError.TemporaryNetworkFailureError:
+                message = "Temporary network failure. Please try again."
+            case QNetworkReply.NetworkError.ProtocolFailure:
+                message = "Protocol error. The server returned an invalid response."
+            case QNetworkReply.NetworkError.ContentAccessDenied:
+                message = f"Access denied (HTTP {status_code}). Check credentials or permissions."
+            case QNetworkReply.NetworkError.ContentNotFoundError:
+                message = f"Resource not found (HTTP {status_code}). The endpoint or file may not exist."
+            case QNetworkReply.NetworkError.AuthenticationRequiredError:
+                message = f"Authentication required (HTTP {status_code}). Provide valid credentials."
+            case QNetworkReply.NetworkError.ContentConflictError:
+                message = f"Request conflict (HTTP {status_code}). Possibly duplicate or invalid data."
+            case QNetworkReply.NetworkError.InternalServerError:
+                message = f"Internal server error (HTTP {status_code}). Try again later."
+            case _:
+                message = f"Unknown network error occurred (HTTP {status_code})."
+
+        full_message = f"{message} | Details: {error_string}"
+        logger.exception(full_message)
+        self.fetchFailed.emit(full_message, status_code)
+
+        if server_down:
+            self.serverAvailable.emit(False)
 
     def _get_error_message(self, reply: QNetworkReply, status_code: int) -> str:
         """Generate appropriate error message based on reply error"""
@@ -405,14 +439,17 @@ class BaseFetcher(QObject):
     def check_server(self, timeout_ms: int = 5000) -> str:
         return self.fetch(endpoint=self._ENDPOINT_VERSION, timeout_ms=timeout_ms, use_cache=False)
 
-    def fetch_progress(self, timeout_ms=1000) -> str:
+    def fetch_progress(self, timeout_ms=1000, retries: int = 1) -> str:
         """Specialized progress fetcher with shorter default timeout"""
         return self.fetch(
             endpoint=self._ENDPOINT_PROGRESS,
             timeout_ms=timeout_ms,
             use_cache=False,
-            retries=1  # Fewer retries for progress updates
+            retries=retries  # Fewer retries for progress updates
         )
+
+    def fetch_status(self, timeout_ms = 1000, retries: int = 1)->str:
+        return self.fetch(endpoint=self._ENDPOINT_STATUS, timeout_ms=timeout_ms, use_cache=False, retries=retries)
 
     def __del__(self):
         self.cancel()
@@ -503,11 +540,11 @@ class ProgressTracker(QObject):
         self.progressUpdated.emit(progress)
         self.progressData.emit(data)
 
-        if progress >= 1.0:
-            self.completed.emit()
-            self.stop_monitoring()
-        else:
-            self._stall_timer.start()
+        # if progress >= 1.0:
+        #     self.completed.emit()
+        #     self.stop_monitoring()
+        # else:
+        #     self._stall_timer.start()
 
         self._last_progress = progress
 
@@ -530,6 +567,98 @@ class ProgressTracker(QObject):
         if self._active:
             self._poll()
 
+
+class StatusTracker(QObject):
+    """
+    Handles real-time progress updates from the Stable Diffusion API.
+    Uses BaseFetcher internally but manages its own polling and state.
+
+    Signals:
+        progressUpdated (float): Emits progress value between 0.0 and 1.0.
+        progressData (dict): Emits full progress response dictionary.
+        stalled (): Emits if no progress is detected within stall timeout.
+        completed (): Emits when progress reaches 1.0 and monitoring stops.
+    """
+
+    statusData = Signal(dict)
+    stalled = Signal()
+    completed = Signal()
+
+    def __init__(self, base_fetcher: BaseFetcher, parent=None):
+        super().__init__(parent)
+        self.fetcher = base_fetcher
+        self._poll_timer = QTimer(self)
+        self._stall_timer = QTimer(self)
+        self._active = False
+
+        # Configure timers
+        self._poll_timer.setInterval(1500)       # How often to poll the API
+        self._stall_timer.setInterval(3000)     # Stall detection timeout
+        self._poll_timer.timeout.connect(self._poll)
+        self._stall_timer.timeout.connect(self._handle_stall)
+
+        # Connect fetcher responses to local handlers
+        self.fetcher.dataFetched.connect(self._handle_status_response)
+        self.fetcher.fetchFailed.connect(self._handle_status_failure)
+
+    def start_monitoring(self, interval_ms=500):
+        """
+        Begin polling for progress updates.
+        Args:
+            interval_ms (int): Interval between progress checks in milliseconds.
+        """
+        if not self._active:
+            self._active = True
+            self._poll_timer.setInterval(interval_ms)
+            self._poll_timer.start()
+            self._stall_timer.start()
+            self._poll()  # Initial fetch
+
+    def stop_monitoring(self):
+        """
+        Stop all polling and internal timers.
+        """
+        self._active = False
+        self._poll_timer.stop()
+        self._stall_timer.stop()
+
+    @Slot()
+    def _poll(self):
+        """
+        Internal: Triggers a fetch from the /progress endpoint.
+        """
+        if self._active:
+            self.fetcher.fetch_status()
+
+    @Slot(object, str)
+    def _handle_status_response(self, data, _):
+        """
+        Processes successful progress response from BaseFetcher.
+        Emits progress signals and handles stall detection.
+        """
+        if not self._active:
+            return
+
+        self.statusData.emit(data)
+
+    @Slot(str, int, str)
+    def _handle_status_failure(self, error, code, _):
+        """
+        Handles fetch failure for /progress.
+        Retries if error is not an auth issue.
+        """
+        if self._active and code not in (401, 403):
+            self._poll()  # Retry immediately
+
+    @Slot()
+    def _handle_stall(self):
+        """
+        Emits stalled signal if no progress change is detected.
+        Still attempts to re-poll to avoid getting stuck.
+        """
+        self.stalled.emit()
+        if self._active:
+            self._poll()
 
 
 if __name__ == "__main__":

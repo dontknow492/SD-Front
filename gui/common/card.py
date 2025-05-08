@@ -73,11 +73,9 @@ class CardBase(SimpleCardWidget):
     # ---------- Event Overrides ----------
 
     def enterEvent(self, event):
-        print('enter', self.show_info_on_focus)
         if self._hover_enabled:
             self.apply_style()
         if self.show_info_on_focus:
-            print('show')
             info_view_manager.set_info(self.title, self.description, self.info_icon)
             # self.info_signal.emit(self.title, self.description, self.info_icon)
         super().enterEvent(event)
@@ -87,20 +85,17 @@ class CardBase(SimpleCardWidget):
             self.clear_style()
         if self.show_info_on_focus:
             # self.hide_signal.emit()
-            print('hide')
             info_view_manager.hide_info()
         super().leaveEvent(event)
 
     def focusInEvent(self, event):
         self._is_focused = True
-        print("Focus in")
         if self._focus_style_enabled:
             self.apply_style()
         super().focusInEvent(event)
 
     def focusOutEvent(self, event):
         self._is_focused = False
-        print("Focus out")
         self.clear_style()
         super().focusOutEvent(event)
 

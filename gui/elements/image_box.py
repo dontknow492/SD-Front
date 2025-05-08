@@ -25,6 +25,35 @@ def create_themed_tool_button(icon: FluentIconBase, tooltip: str = None, cursor:
     button.setCursor(cursor)
     return button
 
+
+class GenerateButton(TogglePushButton):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setText("Generate")
+        self.setIcon(FluentIcon.PLAY_SOLID)
+        self.toggled.connect(self._on_toggled)
+        self.adjustSize()
+
+    def _on_toggled(self, checked: bool):
+        self._update_state(checked)
+
+    def setChecked(self, checked: bool = False):
+        if self.isChecked() == checked:
+            return  # Avoid redundant updates
+        self.blockSignals(True)
+        super().setChecked(checked)
+        self.blockSignals(False)
+        self._update_state(checked)
+
+    def _update_state(self, checked: bool):
+        if checked:
+            self.setText("Generating")
+            self.setIcon(FluentIcon.PAUSE_BOLD)
+        else:
+            self.setText("Generate")
+            self.setIcon(FluentIcon.PLAY_SOLID)
+
+
 class OutputImageBox(VerticalFrame):
     generate_image = Signal()
     reprocess_image = Signal()
@@ -43,12 +72,12 @@ class OutputImageBox(VerticalFrame):
         gen_container = FlowFrame(self, False)
         gen_container.setLayoutMargins(0, 0, 0, 0)
         self.progress_widget = ProgressWidget(self)
-        # self.progress_widget.setVisible(False)
-        self.generate_button = TogglePushButton(FluentIcon.PLAY_SOLID, "Generate", self)
-        self.generate_button.clicked.connect(self.on_generate_toggled)
+        self.progress_widget.setVisible(False)
+        self.generate_button = GenerateButton(self)
+
         self.generate_button.adjustSize()
         self.progress_widget.progress_bar.setFixedHeight(self.generate_button.height())
-        self.generate_button.clicked.connect(lambda: self.progress_widget.setHidden(False))
+        # self.generate_button.clicked.connect(lambda: self.progress_widget.setHidden(False))
 
         reprocess_image = create_themed_tool_button(IconManager.PROCESS, 'Reprocess Image')
         generate_forever = ToggleToolButton(FluentIcon.SYNC, 'Generate Forever')
@@ -56,9 +85,6 @@ class OutputImageBox(VerticalFrame):
         pause_generation = create_themed_tool_button(FluentIcon.PAUSE,  'Pause Generation')
         stop_generation = create_themed_tool_button(IconManager.STOP,  'Stop Generation')
 
-        # gen_container.addWidget(self.progress_widget, stretch=1)
-        # gen_container.addWidget(self.generate_button, stretch=0, alignment=Qt.AlignmentFlag.AlignRight)
-        # gen_container.addWidget(self.progress_widget)
         gen_container.addWidget(self.generate_button)
         gen_container.addWidget(reprocess_image)
         gen_container.addWidget(generate_forever)
@@ -66,11 +92,9 @@ class OutputImageBox(VerticalFrame):
         gen_container.addWidget(pause_generation)
         gen_container.addWidget(stop_generation)
 
-
-
         # Set up the graphics view and scene
         self.view = ImageViewer(self)
-        self.view.setPixmapTransformationMode(Qt.TransformationMode.FastTransformation)
+        self.view.setPixmapTransformationMode(Qt.TransformationMode.SmoothTransformation)
 
         #extra options
         self.extra_option_container = HorizontalFrame(self)
@@ -111,23 +135,41 @@ class OutputImageBox(VerticalFrame):
         self.small_preview.setFixedHeight(100)
         self.hide_preview()
 
+        self.signal_handler()
+
     def signal_handler(self):
         self.send_to_extras_button.clicked.connect(lambda :  self.on_send_to_image(GenerationTypeFlags.EXTRAS))
         self.send_to_image_button.clicked.connect(lambda :  self.on_send_to_image(GenerationTypeFlags.IMAGE2IMAGE))
         self.send_to_text_button.clicked.connect(lambda :  self.on_send_to_image(GenerationTypeFlags.EXTRAS))
         self.send_to_control_button.clicked.connect(lambda :  self.on_send_to_image(GenerationTypeFlags.CONTROLS))
 
+        self.generate_button.clicked.connect(self.on_generate_toggled)
+
     def on_generate_toggled(self, state: bool):
+        logger.debug(f"Generation Button Toggled: {state}")
+        self.progress_widget.setVisible(state)
         if state:
-            self.view.setPixmapTransformationMode(Qt.TransformationMode.FastTransformation)
             self.generate_image.emit()
-            self.generate_button.setText("Stop")
-            self.generate_button.setIcon(FluentIcon.PAUSE_BOLD)
-            self.progress_widget.setVisible(state)
-            self.progress_widget.reset_state()
-        else:
-            self.generate_button.setText("Generate")
-            self.generate_button.setIcon(FluentIcon.PLAY_SOLID)
+            self.generate_button.setEnabled(False)
+
+    def on_skip_generation(self):
+        self.skip_generation.emit()
+
+    def on_stop_generation(self):
+        self.stop_generation.emit()
+
+    def on_reprocess_image(self):
+        self.reprocess_image.emit()
+
+    def on_pause_generation(self):
+        self.pause_generation.emit()
+
+    def enable_generation(self, enable: bool):
+        self.progress_widget.setHidden(enable)
+        self.progress_widget.reset_state()
+        self.generate_button.setEnabled(enable)
+        if enable:
+            self.generate_button.setChecked(False)
 
     def on_progress(self, progress: dict, show_live_progress: bool = True):
         self.extra_option_container.setEnabled(False)
@@ -141,7 +183,8 @@ class OutputImageBox(VerticalFrame):
             self.view.display_base64_image(image)
         self.progress_widget.set_progress(progress)
         self.progress_widget.setVisible(True)
-        logger.debug(f"updating progress image: {image[:100]}")
+        progress["current_image"] = None
+        logger.debug(f"updating progress image: {progress}")
 
     def on_finished(self, image_data: dict):
         logger.debug("Image Generated")
@@ -152,14 +195,13 @@ class OutputImageBox(VerticalFrame):
             self._add_preview(image, not index)
 
         self.generate_button.setChecked(False)
-        self.on_generate_toggled(False)
-        self.progress_widget.setVisible(False)
+        self.enable_generation(True)
 
         # self.set_image(image_data)
 
     def on_error(self, error: str):
         self.progress_widget.setError(error)
-        self.generate_button.setChecked(False)
+        self.enable_generation(True)
 
     # def set_image(self, image_data: str):
     #     self.view.display_base64_image(image_data)
@@ -201,6 +243,7 @@ class OutputImageBox(VerticalFrame):
 
     def on_send_to_image(self, to: GenerationTypeFlags):
         self.sendTo_signal.emit(to, self.view.current_pixmap)
+
 
 
 

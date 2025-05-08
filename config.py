@@ -84,10 +84,10 @@ class MyConfig(QConfig):
                                     EnumSerializer(StartupPage))
 
     # Output Directories
-    extrasDir = ConfigItem("Output", "ExtrasDir", "outputs/extras", ConfigValidator())
-    txt2imgDir = ConfigItem("Output", "Txt2ImgDir", "outputs/txt2img", ConfigValidator())
-    img2imgDir = ConfigItem("Output", "Img2ImgDir", "outputs/img2img", ConfigValidator())
-    controlsDir = ConfigItem("Output", "ControlsDir", "outputs/controls", ConfigValidator())
+    extrasDir = ConfigItem("Output", "ExtrasDir", "outputs\\extras", ConfigValidator())
+    txt2imgDir = ConfigItem("Output", "Txt2ImgDir", "outputs\\txt2img", ConfigValidator())
+    img2imgDir = ConfigItem("Output", "Img2ImgDir", "outputs\\img2img", ConfigValidator())
+    controlsDir = ConfigItem("Output", "ControlsDir", "outputs\\controls", ConfigValidator())
     defaultImageFormat = OptionsConfigItem("Output", "DefaultImageFormat", "jpeg", OptionsValidator(["png", "jpg", "webp", "jpeg"]))
 
     #data directory
@@ -115,6 +115,7 @@ class MyConfig(QConfig):
 
     # Gallery
     maxGalleryImages = RangeConfigItem("Gallery", "PreLoadImages", 50, RangeValidator(50, 200))
+    additionSearchPath = ConfigItem("Gallery", "AdditionalSearchPath", [], ConfigValidator())
 
     #update
     enableAutoUpdate = ConfigItem("Update", "EnableAutoUpdate", True, BoolValidator())
@@ -128,6 +129,14 @@ class MyConfig(QConfig):
             if isinstance(attr, ConfigItem):
                 qconfig.set(attr, attr.defaultValue)
 
+    def get_image_output_dirs(self):
+        path = list()
+        path.append(self.extrasDir.value)
+        path.append(self.txt2imgDir.value)
+        path.append(self.img2imgDir.value)
+        path.append(self.controlsDir.value)
+        return path
+
 
 
 
@@ -135,6 +144,4 @@ class MyConfig(QConfig):
 # Create a config instance and initialize it using the configuration file
 sd_config = MyConfig()
 qconfig.load('config/config.json', sd_config)
-sd_config.reset_to_default()
-print("theme color", sd_config.themeColor.value.name())
 qconfig.save()

@@ -12,6 +12,7 @@ from PySide6.QtCore import Signal, QObject, QSize, Slot
 from pathlib import Path
 from pandas import DataFrame
 from utils import scan_and_update_images
+from config import sd_config
 import json
 
 
@@ -73,9 +74,11 @@ class ImageManager(QObject):
     scan_progress = Signal(int, int)  # current, total
     scan_completed = Signal()
     error_occurred = Signal(str)
-    def __init__(self, scan_paths: list[str], data_backup_dir: str = "data", parent = None):
+    def __init__(self, scan_paths: list[str] = [], data_backup_dir: str = "data", parent = None):
         super().__init__(parent)
         self.scan_paths = [Path(path) for path in scan_paths]
+        paths = sd_config.get_image_output_dirs()
+        self.scan_paths.extend([Path(path) for path in paths])
         self.data_backup_dir = Path(data_backup_dir)
         self.data_backup_path = self.data_backup_dir / "data.feather"
         self.images: List[Path] = []
@@ -84,6 +87,9 @@ class ImageManager(QObject):
 
         self.data_backup_dir.mkdir(parents=True, exist_ok=True)
         self.read_backup()
+
+    # def _get_paths(self):
+    #     self.scan_paths.append()
 
     def read_backup(self) -> bool:
         """Read DataFrame from feather file."""
@@ -425,9 +431,7 @@ class ImageManager(QObject):
         self.executor.shutdown(wait=True)
 
 
-scan_dirs = []
-
 
 card_manager = CoverCardManager()
-image_manager = ImageManager(scan_dirs)
+image_manager = ImageManager()
 info_view_manager = InfoNotificationManager()

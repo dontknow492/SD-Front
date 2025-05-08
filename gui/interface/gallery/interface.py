@@ -19,6 +19,7 @@ class HomeTab(VerticalScrollWidget):
     pathClicked = Signal(str)
     def __init__(self, paths: List[str], parent=None):
         super().__init__(parent = parent)
+
         for path in paths:
             self.add_path(path)
 
@@ -28,9 +29,11 @@ class HomeTab(VerticalScrollWidget):
         self.addWidget(card)
 
 
+
 class GalleryInterface(MyTabWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.pre_load_images = 50
         self._paths = image_manager.get_scan_paths()
         self._add_home()
 
@@ -46,10 +49,13 @@ class GalleryInterface(MyTabWidget):
 
     def on_path_clicked(self, path):
         logger.info(f"Path clicked: {path}")
-        tab = GalleryTab(path, parent = self)
+        tab = GalleryTab(path, parent = self, pre_load=self.pre_load_images)
         # tab = QWidget()
         self.addSubInterface(tab, f"gallery_tab_{self.tabCount()}", path.rsplit("/", 1)[-1])
         self.switchTo(tab)
+
+    def set_preload_images(self, num: int = 50):
+        self.pre_load_images = num
 
 
 

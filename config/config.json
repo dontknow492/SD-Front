@@ -5,9 +5,13 @@
         "EnableMica": true,
         "ThemeMode": "Dark"
     },
+    "Gallery": {
+        "AdditionalSearchPath": [],
+        "PreLoadImages": 50
+    },
     "API": {
         "Url": "http://127.0.0.1:7860",
-        "DefaultSteps": 20
+        "DefaultSteps": 17
     },
     "Cache": {
         "CacheDir": ".cache",
@@ -34,10 +38,7 @@
     },
     "Preview": {
         "LivePreviewDelayMs": 500,
-        "ShowLivePreview": false
-    },
-    "Gallery": {
-        "PreLoadImages": 50
+        "ShowLivePreview": true
     },
     "Startup": {
         "StartupPage": "txt2img"

@@ -1,18 +1,38 @@
-from PySide6.QtCore import Qt
-
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import QHBoxLayout
 from config import sd_config
 from qfluentwidgets import ComboBoxSettingCard, RangeSettingCard, SwitchSettingCard, HyperlinkCard, \
     ExpandGroupSettingCard, FluentIcon, OptionsSettingCard, qconfig, ColorSettingCard, FolderListSettingCard, \
-    SettingCardGroup, SpinBox, PrimaryPushButton
+    SettingCardGroup, SpinBox, PrimaryPushButton, PushSettingCard, PrimaryPushSettingCard
 from gui.common import VerticalScrollWidget, LineEditSettingCard, FolderSettingCard, SizeSettingCard, SpinBoxSettingCard
 from utils import IconManager
 
+
 class SettingsInterface(VerticalScrollWidget):
     """ Setting interface """
+    clearCacheSignal = Signal()
+    aboutSignal = Signal()
+    saveStateSignal = Signal()
+    backupSignal = Signal()
+    restoreSignal = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent=parent)
         self.setObjectName("SettingsInterface")
+        self.setLayoutMargins(0, 0, 0, 0)
+
+        self.setContentSpacing(0)
+        hboxlayout = QHBoxLayout()
+        hboxlayout.setSpacing(6)
+        refresh_button = PrimaryPushButton(FluentIcon.SYNC, "Refresh Server", self)
+        reset_to_default = PrimaryPushButton("Reset to Default", self)
+        reset_to_default.clicked.connect(sd_config.reset_to_default)
+        self.scrollContainer_layout.addSpacing(10)
+        self.addWidget(reset_to_default, alignment=Qt.AlignmentFlag.AlignRight, stretch=0)
+
+        hboxlayout.addStretch(1)
+        hboxlayout.addWidget(refresh_button)
+        hboxlayout.addWidget(reset_to_default)
 
         #main window
         main_win_group = SettingCardGroup(
@@ -182,10 +202,19 @@ class SettingsInterface(VerticalScrollWidget):
             content="Set the size of the thumbnail cache for Gallery(in memory)",
             parent=self
         )
+        clear_cache = PushSettingCard(
+            text="Clear Cache",
+            icon=IconManager.DELETE,
+            title="Clear Cache",
+            content="Clear the app cache",
+            parent=self
+        )
+        clear_cache.clicked.connect(self.clearCacheSignal.emit)
         cache_group.addSettingCards(
             [
                 net_cache_size,
-                thumb_cache_size
+                thumb_cache_size,
+                clear_cache
             ]
         )
 
@@ -235,12 +264,30 @@ class SettingsInterface(VerticalScrollWidget):
             content="Enable autosave",
             configItem=sd_config.enableAutosave
         )
+        backup = PrimaryPushSettingCard(
+            text="Backup",
+            icon=FluentIcon.SAVE_AS,
+            title="Backup",
+            content="Create backup file.",
+            parent=self
+        )
+        restore = PrimaryPushSettingCard(
+            text="Restore",
+            icon=FluentIcon.SYNC,
+            title="Restore",
+            content="Restore the saved state",
+            parent=self
+        )
         save_group.addSettingCards(
             [
                 save_gen_info_to_txt,
-                enable_autosave
+                enable_autosave,
+                backup,
+                restore
             ]
         )
+        backup.clicked.connect(self.backupSignal.emit)
+        restore.clicked.connect(self.restoreSignal.emit)
 
         #gallery
         gallery_group = SettingCardGroup(
@@ -275,12 +322,23 @@ class SettingsInterface(VerticalScrollWidget):
             content = "SD-Front official repo",
             parent = self
         )
+        about_button = PrimaryPushSettingCard(
+            text="About",
+            icon=FluentIcon.INFO,
+            title="About",
+            content="About SD-Front",
+            parent=self
+        )
+        about_button.clicked.connect(self.aboutSignal.emit)
+
         update_group.addSettingCards(
             [
                 enable_auto_update,
-                repo_url
+                repo_url,
+                about_button
             ]
         )
+        self.addLayout(hboxlayout)
         self.addWidgets([
             main_win_group,
             output_dir_group,
@@ -292,12 +350,9 @@ class SettingsInterface(VerticalScrollWidget):
             update_group
         ])
 
-        reset_to_default = PrimaryPushButton("Reset to Default", self)
-        reset_to_default.clicked.connect(sd_config.reset_to_default)
-        self.addWidget(reset_to_default, alignment=Qt.AlignmentFlag.AlignRight, stretch=0)
-
 if __name__ == "__main__":
     from PySide6.QtWidgets import QApplication
+
     app = QApplication([])
     w = SettingsInterface()
     w.show()

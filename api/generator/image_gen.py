@@ -1,6 +1,6 @@
 import json
 from typing import Dict, Any, Optional
-
+from loguru import logger
 from PySide6.QtCore import QObject, QEventLoop, Slot, QByteArray, QUrl, Signal
 from PySide6.QtNetwork import QNetworkReply, QNetworkRequest, QNetworkAccessManager
 
@@ -15,6 +15,9 @@ class ImageGenerator(QObject):
     generation_started = Signal(str)  # endpoint name
     generation_completed = Signal(dict)  # full response
     generation_failed = Signal(str, int)  # error message, status code
+
+    #server
+    serverAvailable = Signal(bool)
 
     # Specialized completion signals
     txt2img_completed = Signal(dict)
@@ -102,8 +105,7 @@ class ImageGenerator(QObject):
         """Handle API responses."""
         try:
             if reply.error() != QNetworkReply.NoError:
-                status_code = reply.attribute(QNetworkRequest.HttpStatusCodeAttribute) or 0
-                self.generation_failed.emit(reply.errorString(), status_code)
+                self._handle_error(reply)
                 return
 
             response = json.loads(bytes(reply.readAll().data()).decode('utf-8'))
@@ -123,7 +125,54 @@ class ImageGenerator(QObject):
         finally:
             reply.deleteLater()
 
-    # def cancel_generation(self):
+    def _handle_error(self, reply: QNetworkReply):
+        """Classify and handle network-related errors from QNetworkReply."""
+        status_code = reply.attribute(QNetworkRequest.HttpStatusCodeAttribute) or 0
+        error_string = reply.errorString()
+
+        error = reply.error()
+        server_down = False
+
+        match error:
+            case QNetworkReply.NetworkError.ConnectionRefusedError:
+                message = "Connection refused by the server. Is the server running?"
+                server_down = True
+            case QNetworkReply.NetworkError.RemoteHostClosedError:
+                message = "Server closed the connection unexpectedly."
+            case QNetworkReply.NetworkError.HostNotFoundError:
+                message = "Host not found. Check your server address or network."
+                server_down = True
+            case QNetworkReply.NetworkError.TimeoutError:
+                message = "Request timed out. Server might be overloaded or unreachable."
+            case QNetworkReply.NetworkError.OperationCanceledError:
+                message = "The request was cancelled before completion."
+            case QNetworkReply.NetworkError.SslHandshakeFailedError:
+                message = "SSL handshake failed. Check SSL configuration or certificates."
+            case QNetworkReply.NetworkError.TemporaryNetworkFailureError:
+                message = "Temporary network failure. Please try again."
+            case QNetworkReply.NetworkError.ProtocolFailure:
+                message = "Protocol error. The server returned an invalid response."
+            case QNetworkReply.NetworkError.ContentAccessDenied:
+                message = f"Access denied (HTTP {status_code}). Check credentials or permissions."
+            case QNetworkReply.NetworkError.ContentNotFoundError:
+                message = f"Resource not found (HTTP {status_code}). The endpoint or file may not exist."
+            case QNetworkReply.NetworkError.AuthenticationRequiredError:
+                message = f"Authentication required (HTTP {status_code}). Provide valid credentials."
+            case QNetworkReply.NetworkError.ContentConflictError:
+                message = f"Request conflict (HTTP {status_code}). Possibly duplicate or invalid data."
+            case QNetworkReply.NetworkError.InternalServerError:
+                message = f"Internal server error (HTTP {status_code}). Try again later.(may be error with payload)"
+            case _:
+                message = f"Unknown network error occurred (HTTP {status_code})."
+
+        full_message = f"{message} | Details: {error_string}"
+        logger.exception(full_message)
+        self.generation_failed.emit(full_message, status_code)
+
+        if server_down:
+            self.serverAvailable.emit(False)
+
+        # def cancel_generation(self):
         """Cancel any ongoing generation."""
         # self.network_manager.
 
@@ -136,16 +185,19 @@ if __name__ == "__main__":
     generator = ImageGenerator()
 
     # Example usage
-    generator.txt2img_completed.connect(
+    generator.img2img_completed.connect(
         lambda r: print("Generation complete!", r["images"][0][:20] + "...")
     )
-
+    generator.generation_failed.connect(
+        lambda msg, code: print("Generation failed:", msg, code)
+    )
     payload = {
         "prompt": "a cute cat",
+        "init_images": ['asl'],
         "steps": 20,
         "width": 512,
         "height": 512
     }
-    generator.txt2img(payload)
+    generator.img2img(payload)
 
     app.exec()

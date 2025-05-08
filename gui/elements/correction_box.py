@@ -176,7 +176,7 @@ class CorrectionBox(GridFrame):
         self.color_grading.setValue(payload.get("hdr_color", self.color_grading.value()))
         self.brightness.setValue(payload.get("hdr_brightness", self.brightness.value()))
         self.sharpness.setValue(payload.get("hdr_sharpen", self.sharpness.value()))
-        self.color_button.setColor(payload.get("hdr_color_picker", self.color_button.color()))
+        self.color_button.setColor(payload.get("hdr_color_picker", self.color_button.color))
         self.color.setValue(payload.get("hdr_tint_ratio", self.color.value()))
 
 

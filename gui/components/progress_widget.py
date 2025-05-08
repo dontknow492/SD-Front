@@ -105,8 +105,8 @@ class ProgressWidget(VerticalFrame):
 
 
         center = progress_geo.center()
+        self.eta_label.move(progress_geo.left() + 15, (center.y() - self.eta_label.height() // 2))
         self.main_text.move(center.x() - self.main_text.width()//2,  center.y() - self.main_text.height()//2)
-        self.eta_label.move(progress_geo.left() + 15, (center.y() - self.eta_label.height()//2))
         self.steps_label.move(progress_geo.right() - self.steps_label.width() - 15,  center.y() - self.steps_label.height()//2)
 
     def setError(self, error: str):
@@ -137,4 +137,5 @@ if __name__ == "__main__":
     window.set_progress(progress)
     window.progress_bar.setFixedHeight(30)
     window.show()
+    window.setError("Error")
     app.exec()

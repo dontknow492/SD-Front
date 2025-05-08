@@ -12,6 +12,7 @@ from pprint import pprint
 from typing import List, Dict, Any, Tuple, Optional
 import io
 
+import numpy as np
 import piexif
 import piexif.helper
 import xxhash
@@ -19,7 +20,7 @@ from PIL import Image
 from pathlib import Path
 
 from PIL.ImageQt import QPixmap
-from PySide6.QtCore import QByteArray
+from PySide6.QtCore import QByteArray, QBuffer, QIODevice
 from PySide6.QtGui import QImage
 from loguru import logger
 from utils.tools import to_abs_path, normalize_paths, cwd
@@ -137,68 +138,104 @@ def hash_file(file_path: str) -> str:
 
 
 
-def base64_pixmap(image_data: str)->Optional[QPixmap]:
-    image_bytes = base64.b64decode(image_data)
-    pixmap = QPixmap()
+def base64_pixmap(image_data: str) -> Optional[QPixmap]:
+    """
+    Convert a base64-encoded image string to a QPixmap.
 
-    if not pixmap.loadFromData(QByteArray(image_bytes)):
-        print("Failed to load image from base64.")
+    Args:
+        image_data (str): Base64-encoded image string, with or without data URI prefix
+                         (e.g., "data:image/png;base64,...").
+
+    Returns:
+        Optional[QPixmap]: Loaded QPixmap if successful, None if conversion fails.
+    """
+    if not image_data:
+        print("Error: Empty image data provided.")
         return None
 
-    return pixmap
+    try:
+        # Remove data URI prefix if present (e.g., "data:image/png;base64,")
+        base64_string = image_data
+        if image_data.startswith("data:image/"):
+            # Match prefix like "data:image/png;base64," or "data:image/jpeg;base64,"
+            match = re.match(r"data:image/[^;]+;base64,", image_data)
+            if match:
+                base64_string = image_data[match.end():]
+            else:
+                print("Error: Invalid data URI prefix format.")
+                return None
 
-def pixmap_base64(pixmap: QPixmap, format: str = "JPEG", quality: int = 90) -> str:
+        # Decode base64 string
+        image_bytes = base64.b64decode(base64_string)
+
+        # Load into QPixmap
+        pixmap = QPixmap()
+        if not pixmap.loadFromData(QByteArray(image_bytes)):
+            print("Error: Failed to load image from base64 data.")
+            return None
+
+        return pixmap
+
+    except base64.binascii.Error:
+        print("Error: Invalid base64 encoding.")
+        return None
+    except Exception as e:
+        print(f"Error: Failed to convert base64 to QPixmap: {str(e)}")
+        return None
+
+
+def pixmap_base64(pixmap: QPixmap, format: str = "JPEG", quality: int = 90, with_prefix: bool = False) -> str:
     """
     Convert QPixmap to a base64-encoded image string.
 
     Args:
         pixmap (QPixmap): Input QPixmap to convert.
         format (str): Output format ("JPEG" or "PNG"). Default is "JPEG".
-        quality (int): JPEG quality (1–100, ignored for PNG). Default is 90.
+        quality (int): JPEG quality (0–100). Ignored for PNG.
+        with_prefix (bool): Whether to include the data URI prefix (e.g., "data:image/jpeg;base64,").
 
     Returns:
         str: Base64-encoded image string.
 
     Raises:
-        ValueError: If QPixmap is null or invalid.
+        ValueError: If QPixmap is null or format is invalid.
         RuntimeError: If conversion fails.
     """
+    if pixmap.isNull():
+        raise ValueError("Input QPixmap is null or invalid")
+
+    format = format.upper()
+    if format not in ("JPEG", "PNG"):
+        raise ValueError("Only 'JPEG' and 'PNG' formats are supported")
+
     try:
-        # Validate input
-        if pixmap.isNull():
-            raise ValueError("Input QPixmap is null or invalid")
-
-        # Convert to QImage (use RGB32 for efficiency, or RGBA for PNG with alpha)
+        # Convert to appropriate format
         qimage = pixmap.toImage().convertToFormat(
-            QImage.Format_RGBA8888 if format.upper() == "PNG" else QImage.Format_RGB32
+            QImage.Format_RGBA8888 if format == "PNG" else QImage.Format_RGB888
         )
-        if qimage.isNull():
-            raise ValueError("Failed to convert QPixmap to QImage")
 
-        # Get raw pixel data
-        width, height = qimage.width(), qimage.height()
-        byte_count = width * height * (4 if format.upper() == "PNG" else 4)
-        byte_array = qimage.constBits().asarray(byte_count)
+        # Create and configure QBuffer
+        buffer = QBuffer()
+        if not buffer.open(QIODevice.OpenModeFlag.WriteOnly):
+            raise RuntimeError("Failed to open QBuffer for writing")
 
-        # Create PIL Image
-        mode = "RGBA" if format.upper() == "PNG" else "RGB"
-        decoder = "BGRA" if format.upper() == "PNG" else "BGRX"
-        pil_img = Image.frombytes(mode, (width, height), byte_array, "raw", decoder)
+        # Save image to buffer (format passed as positional argument)
+        success = qimage.save(buffer, format.upper(), quality if format.upper() == "JPEG" else -1)
+        buffer.close()
 
-        # Save to bytes buffer
-        with io.BytesIO() as img_byte_arr:
-            if format.upper() == "JPEG":
-                pil_img.save(img_byte_arr, format="JPEG", quality=quality, optimize=True)
-            else:
-                pil_img.save(img_byte_arr, format="PNG")
-            base64_str = base64.b64encode(img_byte_arr.getvalue()).decode("utf-8")
+        if not success:
+            raise RuntimeError("Failed to save QImage to QBuffer")
 
-        return base64_str
+        # Encode to base64
+        base64_bytes = base64.b64encode(buffer.data().data()).decode("utf-8")
+
+        if with_prefix:
+            mime = "png" if format == "PNG" else "jpeg"
+            return f"data:image/{mime};base64,{base64_bytes}"
+        return base64_bytes
 
     except Exception as e:
         raise RuntimeError(f"Failed to convert QPixmap to base64: {str(e)}")
-
-
 
 def save_image_as(old_path: str, new_path: str):
     supported_ext = ('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.avif', '.jpe')
@@ -458,11 +495,28 @@ def fetch_model_name(infotext: str) -> str:
 
 
 if __name__ == "__main__":
-    with open(fr"D:\Program\SD Front\data.json", "r") as f:
-        data = json.load(f)
+    from PySide6.QtWidgets import QApplication, QLabel
+    from PIL import ImageQt
+    app = QApplication(sys.argv)
 
-    # os.makedirs(r"D:\Program\SD Front\utils\image\cat", exist_ok=True)
-    save_sdwebui_image_with_info(data, r"D:\Program\SD Front\utils\image\cat")
-    # image = Image.open(r"/samples/00024-2025-04-10-hassakuXLIllustrious_v21fix.jpg")
-    # print(read_sd_webui_gen_info_from_image(image))
-    # print(parse_generation_parameters(read_sd_webui_gen_info_from_image(image)))
+    # Load PIL image
+    pixmap = QPixmap(r"D:\Program\SD Front\outputs\txt2img\00000-2025-05-02-realvisxlV50_v50Bakedvae.jpg")
+    raw = pixmap_base64(pixmap, with_prefix=False)
+    raw_pixmap = base64_pixmap(raw)
+    label = QLabel()
+    label.setPixmap(raw_pixmap)
+    label.show()
+    label.setFixedSize(512, 512)
+    label.setScaledContents(True)
+    app.exec()
+
+    sys.exit(0)
+
+    # with open(fr"D:\Program\SD Front\data.json", "r") as f:
+    #     data = json.load(f)
+    #
+    # # os.makedirs(r"D:\Program\SD Front\utils\image\cat", exist_ok=True)
+    # save_sdwebui_image_with_info(data, r"D:\Program\SD Front\utils\image\cat")
+    # # image = Image.open(r"/samples/00024-2025-04-10-hassakuXLIllustrious_v21fix.jpg")
+    # # print(read_sd_webui_gen_info_from_image(image))
+    # # print(parse_generation_parameters(read_sd_webui_gen_info_from_image(image)))

@@ -99,6 +99,7 @@ class ImageViewer(ImageViewerBase, QGraphicsView):
         self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setRenderHints(QPainter.RenderHint.Antialiasing | QPainter.RenderHint.SmoothPixmapTransform)
         self.setFrameShape(QFrame.Shape.NoFrame)
         self.setAcceptDrops(False)
 
@@ -271,6 +272,10 @@ class InputImageViewer(ImageViewerBase, QGraphicsView):
         file_path, _ = QFileDialog.getOpenFileName(self, "Open Image", "", "Image Files (*.png *.jpg *.jpeg *.bmp *.tiff)")
         if file_path:
             self.load_image(file_path)
+
+    def get_image(self):
+        """Return the current image as a QPixmap."""
+        return self.current_pixmap
 
 
 

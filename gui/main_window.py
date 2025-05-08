@@ -1,8 +1,13 @@
+import json
+import os
+import zipfile
+from datetime import datetime
 from typing import Callable, Optional
-from PySide6.QtCore import Qt, QUrl
+from PySide6.QtCore import Qt, QUrl, QTimer
 from PySide6.QtGui import QDesktopServices, QPixmap, QColor
-from PySide6.QtWidgets import QHBoxLayout, QFrame
-from qfluentwidgets import FluentWindow, SubtitleLabel, setFont, FluentIcon, NavigationItemPosition, \
+from PySide6.QtWidgets import QHBoxLayout, QFrame, QWidget, QFileDialog, QGridLayout, QDialog
+from qasync import asyncSlot
+from qfluentwidgets import FluentWindow, FluentIcon, NavigationItemPosition, \
     PopUpAniStackedWidget, \
     NavigationPushButton, MessageBox
 from config import GenerationTypeFlags, sd_config
@@ -11,11 +16,11 @@ from gui.interface import GalleryInterface
 from gui.interface import TxtOptionWindow, ExtraOptionWindow, ControlOptionWindow, ImgOptionWindow, SettingsInterface
 from loguru import logger
 from api import sd_api_manager
-from manager import info_view_manager
-from utils import IconManager,  save_sdwebui_image_with_info
+from manager import info_view_manager, image_manager
+from utils import IconManager, save_sdwebui_image_with_info, base64_pixmap, pixmap_base64
 from gui.elements import OutputImageBox, ImageInputBox
-from gui.common import NaviAvatarWidget
-from gui.components import NotificationWidget
+from gui.common import NaviAvatarWidget, InfoTime
+from gui.components import NotificationWidget, BackupOptionsDialog
 
 class SDFront(FluentWindow):
     def __init__(self, *args, **kwargs):
@@ -63,8 +68,12 @@ class SDFront(FluentWindow):
         self._init_ui()
         self._init_navigation()
         self._signal_listener()
-        sd_api_manager.get_samplers()
+
+        QTimer.singleShot(1000, self.load_state)
+        sd_config.maxGalleryImages.valueChanged.connect(self.gallery_interface.set_preload_images)
+
         # sd_api_manager.check_server_status()
+        self.info_bar = InfoTime(self)
 #
     def _init_ui(self):
         self.option_stack.addWidget(self.text2image_interface)
@@ -122,6 +131,15 @@ class SDFront(FluentWindow):
         info_view_manager.showInfo.connect(self.show_in_app_notification)
         info_view_manager.hideInfo.connect(self.notification_widget.hide)
 
+        #settings
+        self.settings_interface.clearCacheSignal.connect(self.clear_cache)
+        self.settings_interface.backupSignal.connect(self.backup)
+        self.settings_interface.restoreSignal.connect(self.restore_backup)
+
+    def switchTo(self, interface: QWidget):
+        if interface == self.gallery_interface:
+            self.refresh_gallery()
+        super().switchTo(interface)
 
     def option_switch(self, option):
         self.switchTo(self.spliter)
@@ -130,6 +148,10 @@ class SDFront(FluentWindow):
         else:
             self.inputImageView.hide()
         self.option_stack.setCurrentWidget(option)
+
+    @asyncSlot()
+    async def refresh_gallery(self):
+        await image_manager.refresh()
 
 
     def _on_image_generate(self):
@@ -144,7 +166,18 @@ class SDFront(FluentWindow):
             sd_api_manager.generate_txt_image(payload)
         elif current_widget == self.image2image_interface:
             logger.debug("Image Generate")
+            init_image = self.inputImageView.get_pixmap()
+            if init_image is None:
+                self.info_bar.error_msg("Error", "Please insert valid image to input image box")
+                QTimer.singleShot(500, lambda : self.outputImageView.enable_generation(True))
+                return
+            payload = self.image2image_interface.get_payload()
+            raw_init_image = pixmap_base64(init_image, "png")
+            # logger.critical(f"Init Image: {raw_init_image[100]}")
+            pixmap = base64_pixmap(raw_init_image)
+            payload['init_images'] = [raw_init_image]
             self._current_image_gen = GenerationTypeFlags.IMAGE2IMAGE
+            sd_api_manager.generate_img2img_image(payload)
         elif current_widget == self.controls_interface:
             logger.debug("Controls Generate")
             self._current_image_gen = GenerationTypeFlags.CONTROLS
@@ -152,18 +185,27 @@ class SDFront(FluentWindow):
             logger.debug("Extras Generate")
             self._current_image_gen = GenerationTypeFlags.EXTRAS
 
+        # logger.debug(f"Current Image Generation Type: {self._current_image_gen}, Payload: {payload}")
+
     def on_generation_progress(self, progress: dict):
         live_preview = sd_config.showLivePreview.value
         self.outputImageView.on_progress(progress, live_preview)
 
     def on_generation_finished(self, image_data: dict):
         # self._previous_gen_data = self._current_image_data
+        images = image_data.get('images')
+        if not len(images):
+            logger.error("No images generated")
+            self.show_message("Error", "Error on server side check logs. :|")
+            self.outputImageView.on_error("No images generated")
+            return
+
         self._current_image_data = image_data
         self.outputImageView.on_finished(image_data)
         #todo: make it dynamic(based on config).
         match self._current_image_gen:
             case GenerationTypeFlags.TEXT2IMAGE:
-                output_dir = sd_config.txt2imgDir.valu
+                output_dir = sd_config.txt2imgDir.value
             case GenerationTypeFlags.IMAGE2IMAGE:
                 output_dir = sd_config.img2imgDir.value
             case GenerationTypeFlags.CONTROLS:
@@ -252,3 +294,172 @@ class SDFront(FluentWindow):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self.notification_widget.move(self.width() - self.notification_widget.width() - 20, 20)
+
+    def save_state(self):
+        """Save the current state of the application."""
+        logger.info("Saving application state")
+
+        payload = {
+            'txt2img': self.text2image_interface.get_payload(),
+            'img2img': self.image2image_interface.get_payload(),
+            'controls': self.controls_interface.get_payload(),
+            'extras': self.extras_interface.get_payload()
+        }
+        os.makedirs("config", exist_ok=True)
+        file_path = "config/app_state.json"
+
+        try:
+            with open(file_path, "w", encoding="utf-8") as f:
+                json.dump(payload, f, indent=4)
+            logger.success(f"Application state saved to: {file_path}")
+        except Exception as e:
+            logger.error(f"Failed to save application state: {e}")
+
+    def load_state(self):
+        """Load the saved state of the application."""
+        logger.info("Loading application state")
+        try:
+            with open('config/app_state.json', "r") as file:
+                payload = json.load(file)
+                self.text2image_interface.set_payload(payload['txt2img'])
+                self.image2image_interface.set_payload(payload['img2img'])
+                self.controls_interface.set_payload(payload['controls'])
+                self.extras_interface.set_payload(payload['extras'])
+        except FileNotFoundError:
+            logger.warning("No saved state found")
+        except json.JSONDecodeError:
+            logger.error("Error decoding saved state")
+
+    def backup(self, is_auto: bool = False):
+        """Backup the current state of the application."""
+        """Backup the current state of the application."""
+        dialog = BackupOptionsDialog(self)
+        if dialog.exec() != QDialog.Accepted:
+            logger.info("Backup cancelled by user")
+            return
+
+        selected = dialog.get_selected()
+        logger.info(f"Backup selections: {selected}")
+
+        payload = {}
+        if selected["txt2img"]:
+            payload["txt2img"] = self.text2image_interface.get_payload()
+        if selected["img2img"]:
+            payload["img2img"] = self.image2image_interface.get_payload()
+        if selected["controls"]:
+            payload["controls"] = self.controls_interface.get_payload()
+        if selected["extras"]:
+            payload["extras"] = self.extras_interface.get_payload()
+
+        os.makedirs("config", exist_ok=True)
+        state_path = "config/app_state.json"
+        config_path = "config/config.json"
+        backup_dir = "backups"
+
+        os.makedirs(backup_dir, exist_ok=True)
+
+        # Save current state to app_state.json
+        try:
+            with open(state_path, "w", encoding="utf-8") as state_file:
+                json.dump(payload, state_file, indent=4)
+            logger.success("Application state saved for backup")
+        except Exception as e:
+            logger.error(f"Failed to save application state: {e}")
+            return
+
+        # Read existing config.json or fallback to empty config
+        try:
+            with open(config_path, "r", encoding="utf-8") as cfg_file:
+                config = json.load(cfg_file)
+        except FileNotFoundError:
+            logger.warning("No config.json file found, using empty config")
+            with open(config_path, "w", encoding="utf-8") as cfg_file:
+                json.dump({}, cfg_file, indent=4)
+        except Exception as e:
+            logger.error(f"Failed to read config.json: {e}")
+            return
+
+        # Generate timestamped backup filename
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_filename = f"{backup_dir}/sd_front_backup_{timestamp}.zip"
+
+        # Optionally let user choose location to save
+        if is_auto:
+            file_path = backup_filename
+        else:
+            file_path, _ = QFileDialog.getSaveFileName(
+                self,
+                "Save Backup As",
+                backup_filename,
+                "ZIP Files (*.zip);;All Files (*)"
+            )
+            if not file_path:
+                logger.info("Backup cancelled by user")
+                return
+
+
+        # Create ZIP with app_state.json and config.json
+        try:
+            with zipfile.ZipFile(file_path, "w", zipfile.ZIP_DEFLATED) as zipf:
+                zipf.write(state_path, arcname="app_state.json")
+                zipf.write(config_path, arcname="config.json")
+            logger.success(f"Backup saved successfully to: {file_path}")
+            self.info_bar.success_msg("Backup", f"Backup saved successfully to: {file_path}")
+        except Exception as e:
+            self.show_message("Backup Error", f"Failed to create backup zip: {e}")
+            logger.error(f"Failed to create backup zip: {e}")
+
+    def restore_backup(self):
+        """Restore the application state and config from a backup ZIP."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select Backup ZIP File",
+            "",
+            "ZIP Files (*.zip);;All Files (*)"
+        )
+        if not file_path:
+            logger.info("Restore cancelled by user")
+            return
+
+        try:
+            with zipfile.ZipFile(file_path, "r") as zipf:
+                if "app_state.json" not in zipf.namelist() or "config.json" not in zipf.namelist():
+                    self.show_message("Invalid Backup", "required files not found in zip")
+                    logger.error("Invalid backup: required files not found in zip")
+                    return
+
+                os.makedirs("config", exist_ok=True)
+                zipf.extract("app_state.json", path="config")
+                zipf.extract("config.json", path="config")
+                logger.success("Backup files extracted")
+
+                # # Load and apply app state
+                # with open("config/app_state.json", "r", encoding="utf-8") as state_file:
+                #     state = json.load(state_file)
+                #
+                # self.text2image_interface.set_payload(state.get("txt2img", {}))
+                # self.image2image_interface.set_payload(state.get("img2img", {}))
+                # self.controls_interface.set_payload(state.get("controls", {}))
+                # self.extras_interface.set_payload(state.get("extras", {}))
+
+                logger.success("Application state restored successfully")
+                self.show_message("Restore Complete", "Backup successfully restored restart to apply settings.")
+
+        except zipfile.BadZipFile:
+            logger.error("Failed to open backup: Not a valid ZIP file")
+            self.show_message("Restore Error", "Selected file is not a valid ZIP.")
+        except Exception as e:
+            logger.error(f"Failed to restore backup: {e}")
+            self.show_message("Restore Error", f"An error occurred:\n{str(e)}")
+
+    def clear_cache(self):
+        """Clear the cache of the application."""
+        logger.info("Clearing cache")
+        #todo: clear cache
+
+    def closeEvent(self, event, /):
+        logger.info("Closing application")
+        sd_api_manager.close()
+        if sd_config.enableAutosave.value:
+            self.save_state()
+        super().closeEvent(event)

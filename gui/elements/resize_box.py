@@ -109,6 +109,21 @@ class ResizeBox(HorizontalFrame):
                 "height": self.resize_height.value()
             }
 
+    def getScale(self):
+        return self.resize_scale.value()
+
+    def getWidth(self):
+        return self.resize_width.value()
+
+    def getHeight(self):
+        return self.resize_height.value()
+
+    def getResizeMode(self):
+        if self.current_mode() == "by":
+            return 0
+        else:
+            return 1
+
 
 if   __name__ == "__main__":
     from PySide6.QtWidgets import QApplication
